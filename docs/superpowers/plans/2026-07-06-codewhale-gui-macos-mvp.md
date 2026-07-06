@@ -31,14 +31,14 @@
 **Interfaces:**
 - Produces: 可构建的空壳 app；`pnpm build` 与 `cargo check` 两条静态门后续每个 task 都要过
 
-- [ ] **Step 1: 删除 PyCharm 残留**
+- [x] **Step 1: 删除 PyCharm 残留**
 
 ```bash
 cd /Users/melodylu/PycharmProjects/CodeWhale_GUI
 rm -rf .venv pyproject.toml
 ```
 
-- [ ] **Step 2: 脚手架（先出到临时目录再并入，create-tauri-app 拒绝非空目录）**
+- [x] **Step 2: 脚手架（先出到临时目录再并入，create-tauri-app 拒绝非空目录）**
 
 ```bash
 cd /Users/melodylu/PycharmProjects/CodeWhale_GUI
@@ -48,7 +48,7 @@ rm -rf scaffold-tmp
 pnpm install
 ```
 
-- [ ] **Step 3: 项目命名与 bundle 配置**
+- [x] **Step 3: 项目命名与 bundle 配置**
 
 `package.json`：`"name": "codewhale-gui"`。
 
@@ -70,14 +70,14 @@ pnpm install
 
 （其余脚手架生成字段保留；`build.devUrl` 保持默认 `http://localhost:1420`，该端口在引擎 CORS 白名单内。）
 
-- [ ] **Step 4: 验证两条静态门**
+- [x] **Step 4: 验证两条静态门**
 
 ```bash
 pnpm build                      # 预期: tsc + vite build 成功
 cd src-tauri && cargo check     # 预期: Finished（首次要拉 crates，耐心）
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
