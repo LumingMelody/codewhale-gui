@@ -948,7 +948,7 @@ git commit -m "feat: api client, sse subscription with resume, thread event redu
 - Consumes: command `get_runtime_info` / `run_doctor` / `set_api_key` / `restart_sidecar`；事件 `sidecar-crashed`；`ApiClient`
 - Produces: `MainScreen` 的 props 约定 `{ info: RuntimeInfo }`（Task 7/8 在其内部扩展，不改 App.tsx）
 
-- [ ] **Step 1: App.tsx 三态机**
+- [x] **Step 1: App.tsx 三态机**
 
 ```tsx
 import { useEffect, useState } from 'react';
@@ -1020,7 +1020,7 @@ export default function App() {
 }
 ```
 
-- [ ] **Step 2: Wizard.tsx**
+- [x] **Step 2: Wizard.tsx**
 
 ```tsx
 import { useState } from 'react';
@@ -1070,7 +1070,7 @@ export default function Wizard({ onDone }: { onDone: () => void }) {
 }
 ```
 
-- [ ] **Step 3: CrashScreen.tsx**
+- [x] **Step 3: CrashScreen.tsx**
 
 ```tsx
 import { useState } from 'react';
@@ -1114,7 +1114,7 @@ export default function CrashScreen({
 }
 ```
 
-- [ ] **Step 4: MainScreen.tsx 占坑（Task 7/8 充实）**
+- [x] **Step 4: MainScreen.tsx 占坑（Task 7/8 充实）**
 
 ```tsx
 import type { RuntimeInfo } from '../lib/api';
@@ -1124,7 +1124,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
 }
 ```
 
-- [ ] **Step 5: App.css 追加基础布局类**
+- [x] **Step 5: App.css 追加基础布局类**
 
 ```css
 .center-screen {
@@ -1154,7 +1154,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
 
 （模板自带的 demo 样式/组件——`Greet` 之类——一并删掉。）
 
-- [ ] **Step 6: 静态门 + 手动验证向导两分支**
+- [x] **Step 6: 静态门 + 手动验证向导两分支**
 
 ```bash
 pnpm build && pnpm test   # 预期: 全过
@@ -1163,12 +1163,16 @@ pnpm tauri dev
 # 已有 key 的情况 → 直接 main。验证后关闭。
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/
 git commit -m "feat: app shell - boot/wizard/crash phase machine"
 ```
+
+---
+
+> **实施笔记**：dev 冒烟时用户正在使用本机，未做打断式视觉走查；已验：引擎健康、vite 无报错、build/test 绿。向导两分支的视觉与真 key 验证并入 Task 11 验收清单。
 
 ---
 

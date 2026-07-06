@@ -1,51 +1,67 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import type { RuntimeInfo } from './lib/api';
+import Wizard from './components/Wizard';
+import CrashScreen from './components/CrashScreen';
+import MainScreen from './components/MainScreen';
+import './App.css';
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type Phase =
+  | { name: 'booting'; note: string }
+  | { name: 'wizard'; info: RuntimeInfo }
+  | { name: 'main'; info: RuntimeInfo }
+  | { name: 'crashed'; message: string };
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+async function waitRuntimeInfo(): Promise<RuntimeInfo> {
+  for (let i = 0; i < 60; i++) {
+    const info = await invoke<RuntimeInfo | null>('get_runtime_info');
+    if (info) return info;
+    await new Promise((r) => setTimeout(r, 500));
   }
-
-  return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
-  );
+  throw new Error('engine 启动超时（30s）');
 }
 
-export default App;
+async function keyMissing(): Promise<boolean> {
+  const doctor = await invoke<{ api_key?: { source?: string } }>('run_doctor');
+  return (doctor.api_key?.source ?? 'missing') === 'missing';
+}
+
+export default function App() {
+  const [phase, setPhase] = useState<Phase>({ name: 'booting', note: '正在启动引擎…' });
+
+  useEffect(() => {
+    const unlisten = listen<string>('sidecar-crashed', (e) => {
+      setPhase({ name: 'crashed', message: e.payload });
+    });
+    (async () => {
+      try {
+        const info = await waitRuntimeInfo();
+        setPhase((await keyMissing()) ? { name: 'wizard', info } : { name: 'main', info });
+      } catch (err) {
+        setPhase({ name: 'crashed', message: String(err) });
+      }
+    })();
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  switch (phase.name) {
+    case 'booting':
+      return <div className="center-screen">{phase.note}</div>;
+    case 'wizard':
+      return <Wizard onDone={() => setPhase({ name: 'main', info: phase.info })} />;
+    case 'crashed':
+      return (
+        <CrashScreen
+          message={phase.message}
+          onRestarted={async (info) => {
+            setPhase((await keyMissing()) ? { name: 'wizard', info } : { name: 'main', info });
+          }}
+        />
+      );
+    case 'main':
+      return <MainScreen info={phase.info} />;
+  }
+}
