@@ -551,7 +551,7 @@ git commit -m "feat: run_doctor and set_api_key commands via sidecar CLI"
   - `threadReducer(state: ThreadViewState, ev: ThreadEvent): ThreadViewState` 与 `initialThreadView`
   - 类型 `ThreadEvent`、`ThreadSummary`、`ConversationItem`、`PendingApproval`、`ThreadViewState`
 
-- [ ] **Step 1: 装 vitest 与 react-markdown**
+- [x] **Step 1: 装 vitest 与 react-markdown**
 
 ```bash
 pnpm add -D vitest
@@ -560,7 +560,7 @@ pnpm add react-markdown
 
 `package.json` scripts 加 `"test": "vitest run"`。
 
-- [ ] **Step 2: 写 api.ts**
+- [x] **Step 2: 写 api.ts**
 
 ```typescript
 export interface RuntimeInfo {
@@ -647,7 +647,7 @@ export class ApiClient {
 }
 ```
 
-- [ ] **Step 3: 写 events.ts（SSE 用命名事件，必须逐名 addEventListener）**
+- [x] **Step 3: 写 events.ts（SSE 用命名事件，必须逐名 addEventListener）**
 
 ```typescript
 export interface ThreadEvent {
@@ -724,7 +724,7 @@ export function subscribeThreadEvents(opts: SubscribeOptions): () => void {
 }
 ```
 
-- [ ] **Step 4: 先写 reducer 的失败测试**
+- [x] **Step 4: 先写 reducer 的失败测试**
 
 `src/state/threadReducer.test.ts`：
 
@@ -788,14 +788,14 @@ describe('threadReducer', () => {
 });
 ```
 
-- [ ] **Step 5: 跑测试确认失败**
+- [x] **Step 5: 跑测试确认失败**
 
 ```bash
 pnpm test
 # 预期: FAIL - Cannot find module './threadReducer'
 ```
 
-- [ ] **Step 6: 实现 threadReducer.ts**
+- [x] **Step 6: 实现 threadReducer.ts**
 
 ```typescript
 import type { ThreadEvent } from '../lib/events';
@@ -920,14 +920,14 @@ export function threadReducer(state: ThreadViewState, ev: ThreadEvent): ThreadVi
 }
 ```
 
-- [ ] **Step 7: 跑测试确认通过 + 构建门**
+- [x] **Step 7: 跑测试确认通过 + 构建门**
 
 ```bash
 pnpm test    # 预期: 4 passed
 pnpm build   # 预期: 通过
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/ package.json pnpm-lock.yaml
