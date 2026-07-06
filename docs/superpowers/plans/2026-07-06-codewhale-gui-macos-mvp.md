@@ -1330,7 +1330,7 @@ git commit -m "feat: thread list with 5s refresh + create session via directory 
 - Consumes: `subscribeThreadEvents`、`threadReducer`/`initialThreadView`、`ApiClient.startTurn/steerTurn/interruptTurn`
 - Produces: `ConversationView` props `{ api: ApiClient; info: RuntimeInfo; threadId: string }`；内部把 `state.approvals` 传给 Task 9 的 `ApprovalModal`（本 task 先不渲染审批）
 
-- [ ] **Step 1: ItemView.tsx（按 kind 分渲染）**
+- [x] **Step 1: ItemView.tsx（按 kind 分渲染）**
 
 ```tsx
 import ReactMarkdown from 'react-markdown';
@@ -1368,7 +1368,7 @@ export default function ItemView({ item }: { item: ConversationItem }) {
 }
 ```
 
-- [ ] **Step 2: ConversationView.tsx**
+- [x] **Step 2: ConversationView.tsx**
 
 ```tsx
 import { useEffect, useReducer, useRef, useState } from 'react';
@@ -1471,7 +1471,7 @@ export default function ConversationView({
 @keyframes blink { 50% { opacity: 0; } }
 ```
 
-- [ ] **Step 3: MainScreen 换占位**
+- [x] **Step 3: MainScreen 换占位**
 
 ```tsx
 {selectedId ? (
@@ -1483,7 +1483,7 @@ export default function ConversationView({
 
 （对应 import 加上；`key={selectedId}` 保证切线程时 reducer 状态整体重置。）
 
-- [ ] **Step 4: 静态门 + 真机联调**
+- [x] **Step 4: 静态门 + 真机联调**
 
 ```bash
 pnpm build && pnpm test   # 预期: 全过
@@ -1493,12 +1493,16 @@ pnpm tauri dev
 # 关掉 wifi 再开 → banner 出现又消失（重连续传）
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
 git commit -m "feat: conversation view - replay + live sse, send/interrupt/steer"
 ```
+
+---
+
+> **实施笔记（重要契约修正）**：无 key 环境用真引擎抓到 SSE 实际 payload——`item.*` 事件为嵌套 `{item: {id, kind, status, summary, detail}}`（非计划假设的扁平 `{kind, text}`），`turn.*` 为 `{turn: {...}}`；错误 item **没有前置 item.started 直接以 item.failed 出场**；failed turn 也以 `turn.completed`（payload.turn.status=failed）收尾。reducer 已改为嵌套取值 + upsert 语义，测试改用真机 payload（6 用例）。`item.delta` 与 `approval.required` 的 payload 需真 key 触发，容错处理保留，Task 11 复核。
 
 ---
 
