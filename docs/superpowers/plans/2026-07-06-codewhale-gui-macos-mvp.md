@@ -195,7 +195,7 @@ git commit -m "feat: pinned sidecar fetch script with sha256 verify + externalBi
   - Tauri 事件 `"sidecar-crashed"`（payload 为 String 描述）
   - `sidecar::start(app: AppHandle) -> Result<RuntimeInfo, String>`、`sidecar::shutdown(app: &AppHandle)`
 
-- [ ] **Step 1: 加依赖**
+- [x] **Step 1: 加依赖**
 
 `src-tauri/Cargo.toml` `[dependencies]` 增加：
 
@@ -206,7 +206,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 tokio = { version = "1", features = ["time"] }
 ```
 
-- [ ] **Step 2: 先写端口探测的失败测试**
+- [x] **Step 2: 先写端口探测的失败测试**
 
 `src-tauri/src/sidecar.rs` 底部：
 
@@ -236,14 +236,14 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: 跑测试确认编译失败（pick_port 未定义）**
+- [x] **Step 3: 跑测试确认编译失败（pick_port 未定义）**
 
 ```bash
 cd src-tauri && cargo test pick_port
 # 预期: 编译错误 cannot find function `pick_port`
 ```
 
-- [ ] **Step 4: 实现 sidecar.rs**
+- [x] **Step 4: 实现 sidecar.rs**
 
 ```rust
 use serde::Serialize;
@@ -369,7 +369,7 @@ pub async fn restart_sidecar(app: AppHandle) -> Result<RuntimeInfo, String> {
 }
 ```
 
-- [ ] **Step 5: 接线 lib.rs**
+- [x] **Step 5: 接线 lib.rs**
 
 `src-tauri/src/lib.rs` 整体替换为：
 
@@ -410,7 +410,7 @@ pub fn run() {
 
 （模板若把逻辑放在 `main.rs`，保持 `main.rs` 只调 `codewhale_gui_lib::run()` 的脚手架原样。）
 
-- [ ] **Step 6: 跑测试与静态门**
+- [x] **Step 6: 跑测试与静态门**
 
 ```bash
 cd src-tauri && cargo test pick_port
@@ -419,7 +419,7 @@ cargo check
 # 预期: 通过
 ```
 
-- [ ] **Step 7: 冒烟——dev 起 app，确认 sidecar 被拉起**
+- [x] **Step 7: 冒烟——dev 起 app，确认 sidecar 被拉起**
 
 ```bash
 pnpm tauri dev &
@@ -429,12 +429,20 @@ ps aux | grep -v grep | grep "app-server --http"
 # 然后关掉窗口/kill dev，再次 ps 确认 app-server 进程已消失（退出清理生效）
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src-tauri/
 git commit -m "feat: sidecar lifecycle - port/token/spawn/health-wait/crash-event/cleanup"
 ```
+
+---
+
+> **实施笔记（与计划代码的偏差，均已落地）**
+> 1. `codewhale` 是 dispatcher，启动时强制要求同目录有伴生 `codewhale-tui`，且实际 serve 的是它 spawn 的孙进程 `codewhale-tui serve --http`。fetch-sidecar.sh 已改为双二进制下载（+dev 用无后缀 symlink），externalBin 注册两项。
+> 2. `child.kill()` 只杀 dispatcher，孙进程会孤儿化占住端口。`shutdown` 增加按本次运行唯一 auth-token 的 `pkill -f <token>` 兜底清树；token 在 spawn 后立即存入 state。
+> 3. 增加 ctrlc (SIGTERM/SIGINT) 处理走同一 shutdown——RunEvent::Exit 只覆盖正常退出。
+> 4. bash 3.2 借用检查坑：if-let 尾表达式持 MutexGuard 临时量会晚于 state 释放（E0597），拆独立语句。
 
 ---
 
