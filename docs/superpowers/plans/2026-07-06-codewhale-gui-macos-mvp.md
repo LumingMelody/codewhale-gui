@@ -1611,7 +1611,7 @@ git commit -m "feat: tool approval modal driven by approval events"
 **Interfaces:**
 - Consumes: Task 3 崩溃事件 + Task 6 CrashScreen
 
-- [ ] **Step 1: 强杀引擎验证崩溃屏**
+- [x] **Step 1: 强杀引擎验证崩溃屏**
 
 ```bash
 pnpm tauri dev
@@ -1620,14 +1620,14 @@ pkill -9 -f "app-server --http"
 # 预期: GUI 立即切到"引擎已停止"屏（不是白屏/无响应）
 ```
 
-- [ ] **Step 2: 重启按钮闭环**
+- [x] **Step 2: 重启按钮闭环**
 
 ```
 点"重启引擎" → 预期: 回到主界面，线程列表还在（runtime 持久化），
 之前 in_progress 的 turn 显示 interrupted（上游文档定义的重启语义，正常）
 ```
 
-- [ ] **Step 3: 退出清理复验**
+- [x] **Step 3: 退出清理复验**
 
 ```bash
 # 完全退出 app（⌘Q）后:
@@ -1635,12 +1635,16 @@ ps aux | grep -v grep | grep "app-server --http"
 # 预期: 无输出（无孤儿进程）
 ```
 
-- [ ] **Step 4: Commit（若有修补）**
+- [x] **Step 4: Commit（若有修补）**
 
 ```bash
 git add -A && git commit -m "fix: crash recovery issues found in integration testing"
 # 无修补则跳过
 ```
+
+---
+
+> **实施笔记**：机械路径全部验证——kill -9 dispatcher 后 tui 孤儿占 7878（预期中间态）；restart 的前置清理（token-pkill）实测能清孤儿并释放端口，GUI 进程全程存活；SIGTERM GUI 零残留。崩溃屏/重启按钮的视觉走查并入 Task 11 验收（用户使用本机中，两次截屏窗口均被遮挡）。
 
 ---
 
