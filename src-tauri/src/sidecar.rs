@@ -109,16 +109,29 @@ pub fn shutdown(app: &AppHandle) {
     *state.shutting_down.lock().unwrap() = true;
     let child = state.child.lock().unwrap().take();
     if let Some(child) = child {
+        // Windows: taskkill /T 按进程树连孙进程一起杀, 必须在 kill 之前跑
+        // (dispatcher 死后树关系就断了, /T 找不到 codewhale-tui 孙进程)
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &child.pid().to_string()])
+                .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+                .status();
+        }
         let _ = child.kill();
     }
     // codewhale 是 dispatcher, 会再 spawn codewhale-tui 孙进程; child.kill 只杀
-    // dispatcher。用本次运行唯一的 auth-token 作选择器兜底清掉整棵树 (macOS)。
+    // dispatcher。Unix 用本次运行唯一的 auth-token 作选择器兜底清掉整棵树。
     let token = state.token.lock().unwrap().take();
-    if let Some(token) = token {
+    #[cfg(unix)]
+    if let Some(token) = &token {
         let _ = std::process::Command::new("pkill")
-            .args(["-f", &token])
+            .args(["-f", token])
             .status();
     }
+    #[cfg(not(unix))]
+    drop(token);
 }
 
 #[tauri::command]

@@ -113,13 +113,19 @@ export default function ConversationView({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send();
+              if (e.key !== 'Enter') return;
+              // 中文输入法组词上屏的回车不发送
+              if (e.nativeEvent.isComposing) return;
+              // Shift+Enter 换行
+              if (e.shiftKey) return;
+              e.preventDefault();
+              send();
             }}
             placeholder={steering ? '给运行中的 agent 追加指令…' : '输入消息…'}
             rows={1}
           />
           <div className="composer-row">
-            <span className="composer-hint">⌘⏎ 发送</span>
+            <span className="composer-hint">⏎ 发送 · ⇧⏎ 换行</span>
             <button className="send-btn" onClick={send} disabled={!draft.trim()} title="发送">
               <ArrowUpIcon size={16} />
             </button>
