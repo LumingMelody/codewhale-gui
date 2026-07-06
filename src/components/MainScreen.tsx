@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { open } from '@tauri-apps/plugin-dialog';
+import { confirm, open } from '@tauri-apps/plugin-dialog';
 import { ApiClient, type RuntimeInfo, type ThreadSummary } from '../lib/api';
 import ThreadList from './ThreadList';
 import ConversationView from './ConversationView';
@@ -37,6 +37,22 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
     }
   };
 
+  const archiveSession = async (id: string) => {
+    const t = threads.find((x) => x.id === id);
+    const ok = await confirm(`删除会话「${t?.title || t?.preview || id}」？`, {
+      title: '删除会话',
+      kind: 'warning',
+    });
+    if (!ok) return;
+    try {
+      await api.archiveThread(id);
+      if (selectedId === id) setSelectedId(null);
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
   const selected = threads.find((t) => t.id === selectedId) ?? null;
 
   return (
@@ -46,6 +62,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
         selectedId={selectedId}
         onSelect={setSelectedId}
         onCreate={createSession}
+        onArchive={archiveSession}
         error={error}
         enginePort={info.port}
       />

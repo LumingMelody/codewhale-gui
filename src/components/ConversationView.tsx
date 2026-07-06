@@ -3,6 +3,7 @@ import type { ApiClient, RuntimeInfo } from '../lib/api';
 import { subscribeThreadEvents } from '../lib/events';
 import { initialThreadView, threadReducer } from '../state/threadReducer';
 import ApprovalModal from './ApprovalModal';
+import { ArrowUpIcon } from './Icons';
 import ItemView from './ItemView';
 
 export default function ConversationView({
@@ -24,6 +25,14 @@ export default function ConversationView({
   const [connState, setConnState] = useState<'open' | 'reconnecting'>('open');
   const [sendError, setSendError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, [draft]);
 
   useEffect(() => {
     return subscribeThreadEvents({
@@ -62,7 +71,11 @@ export default function ConversationView({
     <div className="conversation">
       <header className="conv-header">
         <div className="conv-title">{title}</div>
-        {workspace && <div className="conv-workspace">{workspace}</div>}
+        {workspace && (
+          <div className="conv-workspace" title={workspace}>
+            {workspace.split('/').pop()}
+          </div>
+        )}
       </header>
       {connState === 'reconnecting' && (
         <div className="banner">连接中断，重连中…</div>
@@ -96,18 +109,19 @@ export default function ConversationView({
         )}
         <div className="composer-card">
           <textarea
+            ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send();
             }}
             placeholder={steering ? '给运行中的 agent 追加指令…' : '输入消息…'}
-            rows={2}
+            rows={1}
           />
           <div className="composer-row">
             <span className="composer-hint">⌘⏎ 发送</span>
             <button className="send-btn" onClick={send} disabled={!draft.trim()} title="发送">
-              ↑
+              <ArrowUpIcon size={16} />
             </button>
           </div>
         </div>

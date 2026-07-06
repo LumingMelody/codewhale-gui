@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import type { ConversationItem } from '../state/threadReducer';
+import { PencilIcon, SparkleIcon, TerminalIcon, WrenchIcon } from './Icons';
 
 export default function ItemView({ item }: { item: ConversationItem }) {
   switch (item.kind) {
@@ -22,7 +23,10 @@ export default function ItemView({ item }: { item: ConversationItem }) {
       return (
         <details className="tool-block reasoning">
           <summary>
-            <span className="tool-icon">✳</span> 思考过程
+            <span className="tool-icon">
+              <SparkleIcon size={13} />
+            </span>
+            思考过程
             {item.status === 'started' && <span className="tool-status running">思考中</span>}
           </summary>
           <div className="reasoning-text">{item.text}</div>
@@ -33,7 +37,9 @@ export default function ItemView({ item }: { item: ConversationItem }) {
       return (
         <details className="tool-block">
           <summary>
-            <span className="tool-icon">{item.kind === 'tool_call' ? '⚙' : '❯'}</span>
+            <span className="tool-icon">
+              {item.kind === 'tool_call' ? <WrenchIcon size={13} /> : <TerminalIcon size={13} />}
+            </span>
             {item.kind === 'tool_call' ? '工具调用' : '命令执行'}
             {item.status === 'started' && <span className="tool-status running">运行中</span>}
             {item.status === 'failed' && <span className="tool-status failed">失败</span>}
@@ -45,7 +51,10 @@ export default function ItemView({ item }: { item: ConversationItem }) {
     case 'file_change':
       return (
         <div className="item-row system">
-          <span className="tool-icon">✎</span> 文件变更: {item.text || JSON.stringify(item.metadata)}
+          <span className="tool-icon">
+            <PencilIcon size={13} />
+          </span>{' '}
+          文件变更: {item.text || JSON.stringify(item.metadata)}
         </div>
       );
     case 'error':

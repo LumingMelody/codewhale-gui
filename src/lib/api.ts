@@ -38,7 +38,8 @@ export class ApiClient {
     if (!res.ok) {
       throw new Error(`${init.method ?? 'GET'} ${path} → ${res.status}: ${await res.text()}`);
     }
-    return res.json() as Promise<T>;
+    const text = await res.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   listThreadSummaries(limit = 50): Promise<ThreadSummary[]> {
@@ -49,6 +50,13 @@ export class ApiClient {
     return this.req(`/v1/threads`, {
       method: 'POST',
       body: JSON.stringify({ workspace }),
+    });
+  }
+
+  archiveThread(threadId: string): Promise<unknown> {
+    return this.req(`/v1/threads/${threadId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: true }),
     });
   }
 

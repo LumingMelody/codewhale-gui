@@ -1,10 +1,25 @@
 import type { ThreadSummary } from '../lib/api';
+import { PlusIcon, TrashIcon } from './Icons';
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diff) || diff < 0) return '';
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return '刚刚';
+  if (m < 60) return `${m} 分钟前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} 小时前`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} 天前`;
+  return new Date(iso).toLocaleDateString();
+}
 
 export default function ThreadList({
   threads,
   selectedId,
   onSelect,
   onCreate,
+  onArchive,
   error,
   enginePort,
 }: {
@@ -12,6 +27,7 @@ export default function ThreadList({
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onArchive: (id: string) => void;
   error: string | null;
   enginePort: number;
 }) {
@@ -19,26 +35,51 @@ export default function ThreadList({
     <div className="sidebar">
       <div className="sidebar-brand">CodeWhale</div>
       <button className="new-chat" onClick={onCreate}>
-        <span className="new-chat-icon">＋</span> 新建会话
+        <span className="new-chat-icon">
+          <PlusIcon size={12} />
+        </span>
+        新建会话
       </button>
       <div className="section-label">会话</div>
       <div className="thread-scroll">
         {error && <p className="error-text sidebar-error">{error}</p>}
-        {threads.map((t) => (
-          <div
-            key={t.id}
-            className={`thread-row${t.id === selectedId ? ' selected' : ''}`}
-            onClick={() => onSelect(t.id)}
-          >
-            <div className="thread-title">{t.title || t.preview || t.id}</div>
-            <div className="thread-meta">
-              {t.workspace.split('/').pop()}
-              {t.branch ? ` · ${t.branch}` : ''}
-              {t.dirty ? ' ●' : ''}
-              {t.latest_turn_status === 'in_progress' ? ' · 运行中' : ''}
+        {threads.map((t) => {
+          const when = timeAgo(t.updated_at);
+          return (
+            <div
+              key={t.id}
+              role="button"
+              tabIndex={0}
+              className={`thread-row${t.id === selectedId ? ' selected' : ''}`}
+              onClick={() => onSelect(t.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(t.id);
+                }
+              }}
+            >
+              <div className="thread-title">{t.title || t.preview || t.id}</div>
+              <div className="thread-meta">
+                {t.workspace.split('/').pop()}
+                {t.branch ? ` · ${t.branch}` : ''}
+                {t.dirty ? ' ●' : ''}
+                {t.latest_turn_status === 'in_progress' ? ' · 运行中' : ''}
+                {when ? ` · ${when}` : ''}
+              </div>
+              <button
+                className="thread-archive"
+                title="删除会话"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArchive(t.id);
+                }}
+              >
+                <TrashIcon size={14} />
+              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="sidebar-footer">
         <span className="status-dot" /> 引擎已连接 · :{enginePort}
