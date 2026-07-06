@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { confirm, open } from '@tauri-apps/plugin-dialog';
 import { ApiClient, type RuntimeInfo, type ThreadSummary } from '../lib/api';
+import { isNewerVersion } from '../lib/version';
+
+export interface LatestRelease {
+  tag: string;
+  url: string;
+}
 import ThreadList from './ThreadList';
 import ConversationView from './ConversationView';
 
@@ -9,6 +17,28 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [update, setUpdate] = useState<LatestRelease | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const [current, latest] = await Promise.all([
+          getVersion(),
+          invoke<LatestRelease>('check_latest_release'),
+        ]);
+        if (!cancelled && isNewerVersion(current, latest.tag)) setUpdate(latest);
+      } catch {
+        // 网络不可达/API 限流时静默，不打扰
+      }
+    };
+    check();
+    const timer = setInterval(check, 6 * 60 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -63,6 +93,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
         onSelect={setSelectedId}
         onCreate={createSession}
         onArchive={archiveSession}
+        update={update}
         error={error}
         enginePort={info.port}
       />

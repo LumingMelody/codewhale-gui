@@ -1,5 +1,7 @@
+import { openUrl } from '@tauri-apps/plugin-opener';
 import type { ThreadSummary } from '../lib/api';
-import { PlusIcon, TrashIcon } from './Icons';
+import type { LatestRelease } from './MainScreen';
+import { DownloadIcon, PlusIcon, TrashIcon } from './Icons';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -20,6 +22,7 @@ export default function ThreadList({
   onSelect,
   onCreate,
   onArchive,
+  update,
   error,
   enginePort,
 }: {
@@ -28,6 +31,7 @@ export default function ThreadList({
   onSelect: (id: string) => void;
   onCreate: () => void;
   onArchive: (id: string) => void;
+  update: LatestRelease | null;
   error: string | null;
   enginePort: number;
 }) {
@@ -81,6 +85,15 @@ export default function ThreadList({
           );
         })}
       </div>
+      {update && (
+        <button
+          className="update-banner"
+          title="打开下载页"
+          onClick={() => openUrl(update.url)}
+        >
+          <DownloadIcon size={13} /> 新版本 {update.tag} 可用
+        </button>
+      )}
       <div className="sidebar-footer">
         <span className="status-dot" /> 引擎已连接 · :{enginePort}
       </div>

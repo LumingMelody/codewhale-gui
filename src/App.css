@@ -246,6 +246,24 @@ button:focus-visible,
   padding: 0 10px;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  text-align: left;
+  color: var(--accent);
+  background: rgba(217, 119, 87, 0.08);
+  border: 1px solid rgba(217, 119, 87, 0.25);
+  border-radius: 8px;
+}
+
+.update-banner:hover {
+  background: rgba(217, 119, 87, 0.15);
+}
+
 .sidebar-footer {
   display: flex;
   align-items: center;

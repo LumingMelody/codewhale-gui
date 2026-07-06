@@ -1,4 +1,5 @@
 mod sidecar;
+mod update;
 
 use sidecar::SidecarState;
 use tauri::Emitter;
@@ -15,6 +16,7 @@ pub fn run() {
             sidecar::restart_sidecar,
             sidecar::run_doctor,
             sidecar::set_api_key,
+            update::check_latest_release,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
