@@ -95,7 +95,7 @@ git commit -m "chore: scaffold Tauri 2 + React/TS app, drop python skeleton"
 **Interfaces:**
 - Produces: `src-tauri/binaries/codewhale-aarch64-apple-darwin`（可执行，v0.8.66）；tauri.conf 注册名 `binaries/codewhale`（Rust 侧 `.sidecar("codewhale")` 引用）
 
-- [ ] **Step 1: 写下载脚本**
+- [x] **Step 1: 写下载脚本**
 
 `scripts/fetch-sidecar.sh`：
 
@@ -122,7 +122,7 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "下载 $ASSET $VERSION（国内网络请先 export HTTPS_PROXY=...）"
+echo "下载 ${ASSET} ${VERSION} (国内网络请先 export HTTPS_PROXY=...)"  # 注意: bash 3.2 + set -u 下 $VAR 紧跟全角字符会误并入变量名, 必须 ${} 且用 ASCII 括号
 curl -fL --retry 3 -o "$TMP/$ASSET" "$BASE/$ASSET"
 curl -fL --retry 3 -o "$TMP/sha.txt" "$BASE/codewhale-artifacts-sha256.txt"
 
@@ -146,7 +146,7 @@ echo -n "OK: "
 chmod +x scripts/fetch-sidecar.sh
 ```
 
-- [ ] **Step 2: 跑脚本验证**
+- [x] **Step 2: 跑脚本验证**
 
 ```bash
 ./scripts/fetch-sidecar.sh
@@ -155,7 +155,7 @@ chmod +x scripts/fetch-sidecar.sh
 # 预期: 版本串含 0.8.66
 ```
 
-- [ ] **Step 3: 注册 externalBin**
+- [x] **Step 3: 注册 externalBin**
 
 `src-tauri/tauri.conf.json` 的 `bundle` 加：
 
@@ -165,14 +165,14 @@ chmod +x scripts/fetch-sidecar.sh
 
 （Tauri 按 `binaries/codewhale-<target-triple>` 自动解析到刚下载的文件。）
 
-- [ ] **Step 4: 验证配置合法**
+- [x] **Step 4: 验证配置合法**
 
 ```bash
 cd src-tauri && cargo check
 # 预期: 通过。externalBin 缺文件会在 tauri build 时报错，本步先保证 conf 解析不炸
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/fetch-sidecar.sh src-tauri/tauri.conf.json
