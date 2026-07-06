@@ -1186,7 +1186,7 @@ git commit -m "feat: app shell - boot/wizard/crash phase machine"
 - Consumes: `ApiClient.listThreadSummaries` / `createThread`；`@tauri-apps/plugin-dialog` 的 `open`
 - Produces: `MainScreen` 内部状态 `selectedThreadId: string | null`；`<ConversationView key={threadId} api info threadId />` 挂载点（Task 8 实现该组件，本 task 先渲染占位 div）
 
-- [ ] **Step 1: 装 dialog 插件（三处）**
+- [x] **Step 1: 装 dialog 插件（三处）**
 
 ```bash
 pnpm add @tauri-apps/plugin-dialog
@@ -1197,7 +1197,7 @@ cd src-tauri && cargo add tauri-plugin-dialog
 
 `src-tauri/capabilities/default.json` 的 `permissions` 数组加 `"dialog:default"`。
 
-- [ ] **Step 2: ThreadList.tsx**
+- [x] **Step 2: ThreadList.tsx**
 
 ```tsx
 import { useCallback, useEffect, useState } from 'react';
@@ -1272,7 +1272,7 @@ export default function ThreadList({
 .thread-meta { font-size: 12px; opacity: 0.7; }
 ```
 
-- [ ] **Step 3: MainScreen 接线**
+- [x] **Step 3: MainScreen 接线**
 
 ```tsx
 import { useMemo, useState } from 'react';
@@ -1298,7 +1298,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
 }
 ```
 
-- [ ] **Step 4: 静态门 + 手动验证**
+- [x] **Step 4: 静态门 + 手动验证**
 
 ```bash
 pnpm build && pnpm test && (cd src-tauri && cargo check)   # 预期: 全过
@@ -1307,12 +1307,16 @@ pnpm tauri dev
 # 左栏出现新线程且被选中; 5 秒轮询不报错
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
 git commit -m "feat: thread list with 5s refresh + create session via directory picker"
 ```
+
+---
+
+> **实施笔记**：目录选择器的点击走查并入 Task 11 验收（不打扰正在使用本机的用户）。数据链路已用真引擎 curl 验证：POST /v1/threads {workspace} → 201，summary 字段与 ThreadSummary 接口完全一致；测试线程已归档还原环境。
 
 ---
 

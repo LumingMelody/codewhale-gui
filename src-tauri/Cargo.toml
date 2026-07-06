@@ -27,4 +27,5 @@ uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 tokio = { version = "1", features = ["time"] }
 ctrlc = { version = "3.5.2", features = ["termination"] }
+tauri-plugin-dialog = "2.7.1"
 
