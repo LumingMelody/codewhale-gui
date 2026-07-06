@@ -104,6 +104,8 @@
 
 Windows/Linux 打包、代码签名与公证、usage 面板、tasks/automations/fleet/snapshots 管理、多引擎版本管理、自动更新。
 
+**智能网关（二期）**：用户计划自建 LLM 网关，让 CodeWhale 的 `base_url` 指向网关地址，所有问答流量经网关路由。这是纯引擎配置层变更（config.toml 的 `base_url` 字段），GUI 零改动。MVP 约束：首次向导写 config 时**不触碰 `base_url`**（保留默认），为二期留出干净的切换点。
+
 ## 风险与应对
 
 - **国内网络下载 release 二进制慢/断**：fetch 脚本支持 `HTTPS_PROXY`；二进制下载一次后缓存，不进 git
