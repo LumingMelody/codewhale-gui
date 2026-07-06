@@ -1516,7 +1516,7 @@ git commit -m "feat: conversation view - replay + live sse, send/interrupt/steer
 - Consumes: `state.approvals`（`PendingApproval[]`）、`ApiClient.decideApproval`
 - Produces: 无下游依赖，MVP 功能闭环
 
-- [ ] **Step 1: ApprovalModal.tsx**
+- [x] **Step 1: ApprovalModal.tsx**
 
 ```tsx
 import { useState } from 'react';
@@ -1571,7 +1571,7 @@ export default function ApprovalModal({
 button.primary { background: #4a90d9; color: white; }
 ```
 
-- [ ] **Step 2: ConversationView 渲染（items 区域后面加）**
+- [x] **Step 2: ConversationView 渲染（items 区域后面加）**
 
 ```tsx
 {state.approvals.length > 0 && (
@@ -1579,7 +1579,7 @@ button.primary { background: #4a90d9; color: white; }
 )}
 ```
 
-- [ ] **Step 3: 真机触发一次审批验证 payload 字段**
+- [x] **Step 3: 真机触发一次审批验证 payload 字段**
 
 ```bash
 pnpm tauri dev
@@ -1589,13 +1589,17 @@ pnpm tauri dev
 # 对照真实 approval.required payload 修 reducer 取值行 + 同步改测试
 ```
 
-- [ ] **Step 4: 静态门 + Commit**
+- [x] **Step 4: 静态门 + Commit**
 
 ```bash
 pnpm build && pnpm test
 git add -A
 git commit -m "feat: tool approval modal driven by approval events"
 ```
+
+---
+
+> **实施笔记**：触发真实审批需要有效 API key（turn 要能跑起来才会调用受审工具），本机无 key。approval.required 的 payload 字段核对并入 Task 11 验收（reducer 已容错取 approval_id/id + summary + matched_rule；若不符按 console.debug 原始事件修）。
 
 ---
 

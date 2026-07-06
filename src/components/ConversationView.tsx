@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import type { ApiClient, RuntimeInfo } from '../lib/api';
 import { subscribeThreadEvents } from '../lib/events';
 import { initialThreadView, threadReducer } from '../state/threadReducer';
+import ApprovalModal from './ApprovalModal';
 import ItemView from './ItemView';
 
 export default function ConversationView({
@@ -62,6 +63,7 @@ export default function ConversationView({
         ))}
         <div ref={bottomRef} />
       </div>
+      {state.approvals.length > 0 && <ApprovalModal approval={state.approvals[0]} api={api} />}
       <div className="composer">
         {sendError && <p className="error-text">{sendError}</p>}
         {state.activeTurnId && (
