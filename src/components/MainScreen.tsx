@@ -10,6 +10,14 @@ export interface LatestRelease {
   tag: string;
   url: string;
 }
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 11) return '早上好';
+  if (h >= 11 && h < 13) return '中午好';
+  if (h >= 13 && h < 18) return '下午好';
+  return '晚上好';
+}
 import ThreadList from './ThreadList';
 import ConversationView from './ConversationView';
 
@@ -111,8 +119,8 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
         <div className="conversation">
           <div className="empty-state">
             <img className="empty-mark" src={epMark} alt="" />
-            <h1>开始新的对话</h1>
-            <p>从左侧选择一个会话，或新建会话并选择工作目录</p>
+            <h1>{greeting()}，欢迎回到 Ever Pretty</h1>
+            <p>从左侧选择一个会话，或新建会话开始今天的工作</p>
           </div>
         </div>
       )}
