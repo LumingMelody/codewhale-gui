@@ -457,7 +457,7 @@ git commit -m "feat: sidecar lifecycle - port/token/spawn/health-wait/crash-even
   - command `run_doctor() -> Result<serde_json::Value, String>`（doctor --json 原样 JSON；前端读 `api_key.source`，取值 `"env" | "config" | "missing"`）
   - command `set_api_key(api_key: String) -> Result<(), String>`（写 provider key，不触碰 base_url）
 
-- [ ] **Step 1: 核实 auth 子命令真实旗标（不许臆造 CLI 参数）**
+- [x] **Step 1: 核实 auth 子命令真实旗标（不许臆造 CLI 参数）**
 
 ```bash
 ./src-tauri/binaries/codewhale-aarch64-apple-darwin auth set --help
@@ -467,7 +467,7 @@ git commit -m "feat: sidecar lifecycle - port/token/spawn/health-wait/crash-even
 # 【按实际输出决定 Step 3 的 args 数组，本 task 后续代码默认 auth set 路径】
 ```
 
-- [ ] **Step 2: 追加 doctor 命令到 sidecar.rs**
+- [x] **Step 2: 追加 doctor 命令到 sidecar.rs**
 
 ```rust
 #[tauri::command]
@@ -487,7 +487,7 @@ pub async fn run_doctor(app: AppHandle) -> Result<serde_json::Value, String> {
 
 （`serde_json` 已是 tauri 模板依赖；若 Cargo.toml 没有则加 `serde_json = "1"`。）
 
-- [ ] **Step 3: 追加 set_api_key 命令**
+- [x] **Step 3: 追加 set_api_key 命令**
 
 ```rust
 #[tauri::command]
@@ -511,11 +511,11 @@ pub async fn set_api_key(app: AppHandle, api_key: String) -> Result<(), String> 
 
 （若 Step 1 核实结果是 legacy 路径，args 改 `["login", "--api-key", &api_key]`，其余不变。）
 
-- [ ] **Step 4: lib.rs 注册**
+- [x] **Step 4: lib.rs 注册**
 
 `generate_handler!` 列表加 `sidecar::run_doctor, sidecar::set_api_key`。
 
-- [ ] **Step 5: 静态门 + 真机验证 doctor**
+- [x] **Step 5: 静态门 + 真机验证 doctor**
 
 ```bash
 cd src-tauri && cargo check   # 预期: 通过
@@ -523,12 +523,16 @@ cd src-tauri && cargo check   # 预期: 通过
 # 预期: 合法 JSON，含 "api_key": {"source": ...} 字段
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/
 git commit -m "feat: run_doctor and set_api_key commands via sidecar CLI"
 ```
+
+---
+
+> **实施笔记**：核实到 `auth set` 支持 `--api-key-stdin`（inline `--api-key` 官方标注 discouraged）。实现改为 std::process + stdin 管道传 key（不进程序参数/进程表），二进制路径按 current_exe 兄弟文件 `codewhale` 解析（dev 与 bundle 两态一致）。已用假 key 全链冒烟：set → doctor=config → clear → missing。
 
 ---
 

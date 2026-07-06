@@ -12,6 +12,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             sidecar::get_runtime_info,
             sidecar::restart_sidecar,
+            sidecar::run_doctor,
+            sidecar::set_api_key,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

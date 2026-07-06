@@ -132,6 +132,61 @@ pub async fn restart_sidecar(app: AppHandle) -> Result<RuntimeInfo, String> {
     start(app.clone()).await
 }
 
+#[tauri::command]
+pub async fn run_doctor(app: AppHandle) -> Result<serde_json::Value, String> {
+    let output = app
+        .shell()
+        .sidecar("codewhale")
+        .map_err(|e| e.to_string())?
+        .args(["doctor", "--json"])
+        .output()
+        .await
+        .map_err(|e| format!("doctor 执行失败: {e}"))?;
+    serde_json::from_slice(&output.stdout).map_err(|e| format!("doctor 输出解析失败: {e}"))
+}
+
+/// dev 下 Tauri 把 sidecar 复制到主程序同目录（无 triple 后缀），bundle 下在
+/// Contents/MacOS/ 同目录 —— 两种情况都是 current_exe 的兄弟文件。
+fn engine_cli_path() -> Result<std::path::PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe.parent().ok_or("exe 无父目录")?;
+    Ok(dir.join("codewhale"))
+}
+
+#[tauri::command]
+pub async fn set_api_key(api_key: String) -> Result<(), String> {
+    // key 经 stdin 传递（--api-key-stdin），不进程序参数也不进日志
+    let path = engine_cli_path()?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new(&path)
+            .args(["auth", "set", "--provider", "deepseek", "--api-key-stdin"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("auth set 启动失败: {e}"))?;
+        child
+            .stdin
+            .take()
+            .ok_or("stdin 不可用")?
+            .write_all(api_key.as_bytes())
+            .map_err(|e| format!("写入 key 失败: {e}"))?;
+        // stdin 句柄随语句结束 drop → EOF
+        let out = child
+            .wait_with_output()
+            .map_err(|e| format!("auth set 等待失败: {e}"))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).to_string())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
