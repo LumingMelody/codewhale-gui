@@ -35,7 +35,7 @@ export default function Wizard({ onDone }: { onDone: () => void }) {
           placeholder="sk-..."
           autoFocus
         />
-        <button disabled={busy || key.trim() === ''} onClick={submit}>
+        <button className="primary" disabled={busy || key.trim() === ''} onClick={submit}>
           {busy ? '验证中…' : '保存并继续'}
         </button>
         {error && <p className="error-text">{error}</p>}

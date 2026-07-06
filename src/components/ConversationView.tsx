@@ -9,10 +9,14 @@ export default function ConversationView({
   api,
   info,
   threadId,
+  title,
+  workspace,
 }: {
   api: ApiClient;
   info: RuntimeInfo;
   threadId: string;
+  title: string;
+  workspace: string | null;
 }) {
   const [state, dispatch] = useReducer(threadReducer, initialThreadView);
   const [draft, setDraft] = useState('');
@@ -56,42 +60,57 @@ export default function ConversationView({
 
   return (
     <div className="conversation">
-      {connState === 'reconnecting' && <div className="banner">连接中断，重连中…</div>}
+      <header className="conv-header">
+        <div className="conv-title">{title}</div>
+        {workspace && <div className="conv-workspace">{workspace}</div>}
+      </header>
+      {connState === 'reconnecting' && (
+        <div className="banner">连接中断，重连中…</div>
+      )}
       <div className="items">
-        {state.items.map((item) => (
-          <ItemView key={item.id} item={item} />
-        ))}
-        <div ref={bottomRef} />
+        <div className="items-inner">
+          {state.items.map((item) => (
+            <ItemView key={item.id} item={item} />
+          ))}
+          <div ref={bottomRef} />
+        </div>
       </div>
       {state.approvals.length > 0 && <ApprovalModal approval={state.approvals[0]} api={api} />}
-      <div className="composer">
-        {sendError && <p className="error-text">{sendError}</p>}
+      <div className="composer-zone">
+        {sendError && <p className="error-text composer-error">{sendError}</p>}
         {state.activeTurnId && (
           <div className="turn-controls">
-            <span>agent 运行中…</span>
-            <button onClick={() => api.interruptTurn(threadId, state.activeTurnId!)}>打断</button>
-            <label>
+            <span className="turn-spinner" /> agent 运行中
+            <button className="ghost" onClick={() => api.interruptTurn(threadId, state.activeTurnId!)}>
+              打断
+            </button>
+            <label className="steer-toggle">
               <input
                 type="checkbox"
                 checked={steering}
                 onChange={(e) => setSteering(e.target.checked)}
               />
-              追加指令（steer）
+              追加指令
             </label>
           </div>
         )}
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send();
-          }}
-          placeholder="输入消息，⌘+Enter 发送"
-          rows={3}
-        />
-        <button onClick={send} disabled={!draft.trim()}>
-          发送
-        </button>
+        <div className="composer-card">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send();
+            }}
+            placeholder={steering ? '给运行中的 agent 追加指令…' : '输入消息…'}
+            rows={2}
+          />
+          <div className="composer-row">
+            <span className="composer-hint">⌘⏎ 发送</span>
+            <button className="send-btn" onClick={send} disabled={!draft.trim()} title="发送">
+              ↑
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

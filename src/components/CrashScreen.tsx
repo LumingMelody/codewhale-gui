@@ -30,7 +30,7 @@ export default function CrashScreen({
         <h2>引擎已停止</h2>
         <pre className="error-text">{message}</pre>
         {error && <pre className="error-text">{error}</pre>}
-        <button disabled={busy} onClick={restart}>
+        <button className="primary" disabled={busy} onClick={restart}>
           {busy ? '重启中…' : '重启引擎'}
         </button>
       </div>

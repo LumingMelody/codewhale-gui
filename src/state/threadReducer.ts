@@ -1,8 +1,8 @@
 import type { ThreadEvent } from '../lib/events';
 
 export type ItemKind =
-  | 'user_message' | 'agent_message' | 'tool_call' | 'file_change'
-  | 'command_execution' | 'context_compaction' | 'status' | 'error';
+  | 'user_message' | 'agent_message' | 'agent_reasoning' | 'tool_call'
+  | 'file_change' | 'command_execution' | 'context_compaction' | 'status' | 'error';
 
 export interface ConversationItem {
   id: string;
