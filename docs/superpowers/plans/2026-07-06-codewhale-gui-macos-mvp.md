@@ -1657,7 +1657,7 @@ git add -A && git commit -m "fix: crash recovery issues found in integration tes
 - Consumes: 全部前序 task
 - Produces: `src-tauri/target/release/bundle/dmg/CodeWhale GUI_0.1.0_aarch64.dmg`
 
-- [ ] **Step 1: 版本号与打包**
+- [x] **Step 1: 版本号与打包**
 
 `src-tauri/tauri.conf.json` 确认 `"version": "0.1.0"`（脚手架默认 0.1.0 即可）。
 
@@ -1682,7 +1682,7 @@ ls -lh "src-tauri/target/release/bundle/dmg/"
 9. 恢复: 若 bak 里有你自己的配置，合并回去（key 已被向导写入新 config）
 ```
 
-- [ ] **Step 3: README.md（简短：一段简介 + 安装两步 + 开发三命令 + 引擎升级一行）**
+- [x] **Step 3: README.md（简短：一段简介 + 安装两步 + 开发三命令 + 引擎升级一行）**
 
 ```markdown
 # CodeWhale GUI
@@ -1704,7 +1704,7 @@ pnpm tauri build                              # 打 DMG
 GUI 只依赖 /v1/* API 契约（上游 docs/RUNTIME_API.md，drift test 锁定）。
 ```
 
-- [ ] **Step 4: Commit + tag**
+- [x] **Step 4: Commit + tag**
 
 ```bash
 git add -A
