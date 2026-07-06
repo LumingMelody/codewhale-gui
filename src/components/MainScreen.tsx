@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm, open } from '@tauri-apps/plugin-dialog';
+import epMark from '../assets/ep-mark.png';
 import { ApiClient, type RuntimeInfo, type ThreadSummary } from '../lib/api';
 import { isNewerVersion } from '../lib/version';
 
@@ -109,7 +110,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
       ) : (
         <div className="conversation">
           <div className="empty-state">
-            <div className="empty-mark">◍</div>
+            <img className="empty-mark" src={epMark} alt="" />
             <h1>开始新的对话</h1>
             <p>从左侧选择一个会话，或新建会话并选择工作目录</p>
           </div>

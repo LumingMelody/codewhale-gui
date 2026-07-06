@@ -1,4 +1,6 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
+import epMark from '../assets/ep-mark.png';
+import epWordmark from '../assets/ep-wordmark.png';
 import type { ThreadSummary } from '../lib/api';
 import type { LatestRelease } from './MainScreen';
 import { DownloadIcon, PlusIcon, TrashIcon } from './Icons';
@@ -37,7 +39,10 @@ export default function ThreadList({
 }) {
   return (
     <div className="sidebar">
-      <div className="sidebar-brand">CodeWhale</div>
+      <div className="sidebar-brand">
+        <img className="brand-mark" src={epMark} alt="" />
+        <img className="brand-wordmark" src={epWordmark} alt="Ever Pretty" />
+      </div>
       <button className="new-chat" onClick={onCreate}>
         <span className="new-chat-icon">
           <PlusIcon size={12} />
