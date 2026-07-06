@@ -44,6 +44,12 @@ pub async fn start(app: AppHandle) -> Result<RuntimeInfo, String> {
         .shell()
         .sidecar("codewhale")
         .map_err(|e| format!("sidecar 解析失败: {e}"))?
+        // Windows WebView2 的页面 origin 是 http(s)://tauri.localhost, 不在引擎
+        // 内置 CORS 白名单里(macOS 的 tauri://localhost 在); 此变量叠加不替换
+        .env(
+            "DEEPSEEK_CORS_ORIGINS",
+            "http://tauri.localhost,https://tauri.localhost",
+        )
         .args([
             "app-server",
             "--http",
