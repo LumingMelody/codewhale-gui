@@ -1,0 +1,6 @@
+.venv/
+.idea/
+node_modules/
+src-tauri/binaries/
+dist/
+target/
