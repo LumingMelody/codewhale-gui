@@ -2,7 +2,7 @@ import epMark from '../assets/ep-mark.png';
 import epWordmark from '../assets/ep-wordmark.png';
 import type { ThreadSummary } from '../lib/api';
 import type { SessionMode, UpdateBanner } from './MainScreen';
-import { ChatIcon, CodeIcon, DownloadIcon, PanelLeftIcon, PlusIcon, TrashIcon } from './Icons';
+import { ChatIcon, CodeIcon, DownloadIcon, GearIcon, PanelLeftIcon, PlusIcon, TrashIcon } from './Icons';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -29,6 +29,7 @@ export default function ThreadList({
   onArchive,
   update,
   onApplyUpdate,
+  onOpenSettings,
   appVersion,
   error,
   enginePort,
@@ -44,6 +45,7 @@ export default function ThreadList({
   onArchive: (id: string) => void;
   update: UpdateBanner | null;
   onApplyUpdate: () => void;
+  onOpenSettings: () => void;
   appVersion: string;
   error: string | null;
   enginePort: number;
@@ -157,8 +159,13 @@ export default function ThreadList({
         </button>
       )}
       <div className="sidebar-footer">
-        <span className="status-dot" /> 引擎已连接 · :{enginePort}
-        {appVersion && ` · v${appVersion}`}
+        <span className="footer-status">
+          <span className="status-dot" /> 引擎已连接 · :{enginePort}
+          {appVersion && ` · v${appVersion}`}
+        </span>
+        <button className="icon-btn" title="设置" onClick={onOpenSettings}>
+          <GearIcon size={16} />
+        </button>
       </div>
     </div>
   );

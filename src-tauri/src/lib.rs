@@ -1,4 +1,6 @@
 mod sidecar;
+mod vision_config;
+mod vision_shim;
 
 use sidecar::SidecarState;
 use tauri::Emitter;
@@ -18,8 +20,13 @@ pub fn run() {
             sidecar::run_doctor,
             sidecar::set_api_key,
             sidecar::ensure_chat_workspace,
+            sidecar::save_attachment,
+            vision_config::vision_status,
+            vision_config::set_vision_key,
         ])
         .setup(|app| {
+            // 视觉协议 shim（本机 127.0.0.1:8788，翻译 chat/completions ↔ tabcode responses）
+            vision_shim::spawn();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = sidecar::start(handle.clone()).await {

@@ -8,6 +8,7 @@ import epMark from '../assets/ep-mark.png';
 import { ApiClient, type RuntimeInfo, type ThreadSummary } from '../lib/api';
 import ThreadList from './ThreadList';
 import ConversationView from './ConversationView';
+import SettingsModal from './SettingsModal';
 
 export type SessionMode = 'chat' | 'code';
 
@@ -24,13 +25,20 @@ function greeting(): string {
   return '晚上好';
 }
 
-export default function MainScreen({ info }: { info: RuntimeInfo }) {
+export default function MainScreen({
+  info,
+  onInfoChanged,
+}: {
+  info: RuntimeInfo;
+  onInfoChanged: (info: RuntimeInfo) => void;
+}) {
   const api = useMemo(() => new ApiClient(info.base_url, info.token), [info]);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<SessionMode>('chat');
   const [collapsed, setCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatWorkspace, setChatWorkspace] = useState<string | null>(null);
   const updateRef = useRef<Update | null>(null);
   const [update, setUpdate] = useState<UpdateBanner | null>(null);
@@ -171,6 +179,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
         onArchive={archiveSession}
         update={update}
         onApplyUpdate={applyUpdate}
+        onOpenSettings={() => setSettingsOpen(true)}
         appVersion={appVersion}
         error={error}
         enginePort={info.port}
@@ -183,6 +192,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
           threadId={selectedId}
           title={selected?.title || selected?.preview || selectedId}
           workspace={selectedIsChat ? null : (selected?.workspace ?? null)}
+          workspacePath={selected?.workspace ?? chatWorkspace}
         />
       ) : (
         <div className="conversation">
@@ -196,6 +206,9 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
             </p>
           </div>
         </div>
+      )}
+      {settingsOpen && (
+        <SettingsModal onClose={() => setSettingsOpen(false)} onInfoChanged={onInfoChanged} />
       )}
     </div>
   );

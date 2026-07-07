@@ -62,6 +62,11 @@ export default function App() {
         />
       );
     case 'main':
-      return <MainScreen info={phase.info} />;
+      return (
+        <MainScreen
+          info={phase.info}
+          onInfoChanged={(info) => setPhase({ name: 'main', info })}
+        />
+      );
   }
 }

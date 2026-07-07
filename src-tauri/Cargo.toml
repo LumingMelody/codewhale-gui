@@ -1,6 +1,6 @@
 [package]
 name = "codewhale-gui"
-version = "0.1.8"
+version = "0.1.9"
 description = "CodeWhale desktop workbench"
 authors = ["melodylu"]
 edition = "2021"
@@ -25,9 +25,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
 ctrlc = { version = "3.5.2", features = ["termination"] }
 tauri-plugin-dialog = "2.7.1"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+axum = "0.7"
+toml_edit = "0.22"
 

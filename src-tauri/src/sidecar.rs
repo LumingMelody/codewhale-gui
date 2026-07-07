@@ -157,6 +157,22 @@ pub fn ensure_chat_workspace(app: AppHandle) -> Result<String, String> {
         .ok_or_else(|| "chat 工作区路径非 UTF-8".to_string())
 }
 
+/// 把粘贴/拖入的图片字节写进 <workspace>/.everpretty-attachments/，返回**工作区内相对
+/// 路径**——引擎的 image_analyze 工具只接受工作区内相对路径（禁止逃逸）。
+#[tauri::command]
+pub fn save_attachment(workspace: String, filename: String, bytes: Vec<u8>) -> Result<String, String> {
+    // 防目录穿越：只取纯文件名
+    let name = std::path::Path::new(&filename)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "非法文件名".to_string())?;
+    let rel_dir = ".everpretty-attachments";
+    let dir = std::path::Path::new(&workspace).join(rel_dir);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建附件目录失败: {e}"))?;
+    std::fs::write(dir.join(name), &bytes).map_err(|e| format!("写入附件失败: {e}"))?;
+    Ok(format!("{rel_dir}/{name}"))
+}
+
 #[tauri::command]
 pub async fn restart_sidecar(app: AppHandle) -> Result<RuntimeInfo, String> {
     shutdown(&app);
