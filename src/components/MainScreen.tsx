@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getVersion } from '@tauri-apps/api/app';
-import { invoke } from '@tauri-apps/api/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { confirm, open } from '@tauri-apps/plugin-dialog';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import epMark from '../assets/ep-mark.png';
 import { ApiClient, type RuntimeInfo, type ThreadSummary } from '../lib/api';
-import { isNewerVersion } from '../lib/version';
 
-export interface LatestRelease {
-  tag: string;
-  url: string;
+export interface UpdateBanner {
+  version: string;
+  busy: string | null;
 }
 
 function greeting(): string {
@@ -26,28 +25,55 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [update, setUpdate] = useState<LatestRelease | null>(null);
+  const updateRef = useRef<Update | null>(null);
+  const [update, setUpdate] = useState<UpdateBanner | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const check = async () => {
+    const poll = async () => {
       try {
-        const [current, latest] = await Promise.all([
-          getVersion(),
-          invoke<LatestRelease>('check_latest_release'),
-        ]);
-        if (!cancelled && isNewerVersion(current, latest.tag)) setUpdate(latest);
+        const u = await check();
+        if (!cancelled && u) {
+          updateRef.current = u;
+          setUpdate({ version: u.version, busy: null });
+        }
       } catch {
-        // 网络不可达/API 限流时静默，不打扰
+        // 网络不可达/清单缺失时静默，不打扰
       }
     };
-    check();
-    const timer = setInterval(check, 6 * 60 * 60 * 1000);
+    poll();
+    const timer = setInterval(poll, 6 * 60 * 60 * 1000);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
   }, []);
+
+  const applyUpdate = async () => {
+    const u = updateRef.current;
+    if (!u) return;
+    try {
+      let total = 0;
+      let got = 0;
+      setUpdate({ version: u.version, busy: '准备下载…' });
+      await u.downloadAndInstall((e) => {
+        if (e.event === 'Started') {
+          total = e.data.contentLength ?? 0;
+        } else if (e.event === 'Progress') {
+          got += e.data.chunkLength;
+          if (total > 0) {
+            setUpdate({ version: u.version, busy: `下载中 ${Math.round((got / total) * 100)}%` });
+          }
+        } else if (e.event === 'Finished') {
+          setUpdate({ version: u.version, busy: '安装中，即将重启…' });
+        }
+      });
+      await relaunch();
+    } catch (err) {
+      setUpdate({ version: u.version, busy: null });
+      setError(`自动更新失败: ${String(err)}`);
+    }
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -103,6 +129,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
         onCreate={createSession}
         onArchive={archiveSession}
         update={update}
+        onApplyUpdate={applyUpdate}
         error={error}
         enginePort={info.port}
       />

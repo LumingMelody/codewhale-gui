@@ -1,5 +1,4 @@
 mod sidecar;
-mod update;
 
 use sidecar::SidecarState;
 use tauri::Emitter;
@@ -10,13 +9,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(SidecarState::default())
         .invoke_handler(tauri::generate_handler![
             sidecar::get_runtime_info,
             sidecar::restart_sidecar,
             sidecar::run_doctor,
             sidecar::set_api_key,
-            update::check_latest_release,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

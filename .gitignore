@@ -25,3 +25,6 @@ dist-ssr
 
 # sidecar 二进制由 scripts/fetch-sidecar*.sh 按 sha256 拉取, 不入库
 src-tauri/binaries/
+
+# updater manifest 由发版脚本生成
+latest.json

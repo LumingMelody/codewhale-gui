@@ -1,8 +1,7 @@
-import { openUrl } from '@tauri-apps/plugin-opener';
 import epMark from '../assets/ep-mark.png';
 import epWordmark from '../assets/ep-wordmark.png';
 import type { ThreadSummary } from '../lib/api';
-import type { LatestRelease } from './MainScreen';
+import type { UpdateBanner } from './MainScreen';
 import { DownloadIcon, PlusIcon, TrashIcon } from './Icons';
 
 function timeAgo(iso: string): string {
@@ -25,6 +24,7 @@ export default function ThreadList({
   onCreate,
   onArchive,
   update,
+  onApplyUpdate,
   error,
   enginePort,
 }: {
@@ -33,7 +33,8 @@ export default function ThreadList({
   onSelect: (id: string) => void;
   onCreate: () => void;
   onArchive: (id: string) => void;
-  update: LatestRelease | null;
+  update: UpdateBanner | null;
+  onApplyUpdate: () => void;
   error: string | null;
   enginePort: number;
 }) {
@@ -93,10 +94,11 @@ export default function ThreadList({
       {update && (
         <button
           className="update-banner"
-          title="打开下载页"
-          onClick={() => openUrl(update.url)}
+          title="自动下载并安装更新"
+          disabled={update.busy !== null}
+          onClick={onApplyUpdate}
         >
-          <DownloadIcon size={13} /> 新版本 {update.tag} 可用
+          <DownloadIcon size={13} /> {update.busy ?? `新版本 v${update.version} · 点击更新`}
         </button>
       )}
       <div className="sidebar-footer">
