@@ -25,6 +25,7 @@ export default function ThreadList({
   onArchive,
   update,
   onApplyUpdate,
+  appVersion,
   error,
   enginePort,
 }: {
@@ -35,6 +36,7 @@ export default function ThreadList({
   onArchive: (id: string) => void;
   update: UpdateBanner | null;
   onApplyUpdate: () => void;
+  appVersion: string;
   error: string | null;
   enginePort: number;
 }) {
@@ -103,6 +105,7 @@ export default function ThreadList({
       )}
       <div className="sidebar-footer">
         <span className="status-dot" /> 引擎已连接 · :{enginePort}
+        {appVersion && ` · v${appVersion}`}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { confirm, open } from '@tauri-apps/plugin-dialog';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
@@ -27,6 +28,11 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
   const [error, setError] = useState<string | null>(null);
   const updateRef = useRef<Update | null>(null);
   const [update, setUpdate] = useState<UpdateBanner | null>(null);
+  const [appVersion, setAppVersion] = useState('');
+
+  useEffect(() => {
+    getVersion().then(setAppVersion);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +136,7 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
         onArchive={archiveSession}
         update={update}
         onApplyUpdate={applyUpdate}
+        appVersion={appVersion}
         error={error}
         enginePort={info.port}
       />
