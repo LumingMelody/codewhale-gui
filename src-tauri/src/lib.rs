@@ -17,6 +17,7 @@ pub fn run() {
             sidecar::restart_sidecar,
             sidecar::run_doctor,
             sidecar::set_api_key,
+            sidecar::ensure_chat_workspace,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

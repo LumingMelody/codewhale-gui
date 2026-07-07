@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { confirm, open } from '@tauri-apps/plugin-dialog';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import epMark from '../assets/ep-mark.png';
 import { ApiClient, type RuntimeInfo, type ThreadSummary } from '../lib/api';
+import ThreadList from './ThreadList';
+import ConversationView from './ConversationView';
+
+export type SessionMode = 'chat' | 'code';
 
 export interface UpdateBanner {
   version: string;
@@ -18,20 +23,22 @@ function greeting(): string {
   if (h >= 13 && h < 18) return '下午好';
   return '晚上好';
 }
-import ThreadList from './ThreadList';
-import ConversationView from './ConversationView';
 
 export default function MainScreen({ info }: { info: RuntimeInfo }) {
   const api = useMemo(() => new ApiClient(info.base_url, info.token), [info]);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<SessionMode>('chat');
+  const [collapsed, setCollapsed] = useState(false);
+  const [chatWorkspace, setChatWorkspace] = useState<string | null>(null);
   const updateRef = useRef<Update | null>(null);
   const [update, setUpdate] = useState<UpdateBanner | null>(null);
   const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     getVersion().then(setAppVersion);
+    invoke<string>('ensure_chat_workspace').then(setChatWorkspace).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -96,11 +103,34 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
     return () => clearInterval(timer);
   }, [refresh]);
 
+  // chat 线程 = 工作区落在 scratch 目录；其余算 code 会话
+  const isChatThread = useCallback(
+    (t: ThreadSummary) => chatWorkspace !== null && t.workspace === chatWorkspace,
+    [chatWorkspace],
+  );
+  const visibleThreads = threads.filter((t) => (mode === 'chat' ? isChatThread(t) : !isChatThread(t)));
+
+  const switchMode = (m: SessionMode) => {
+    if (m === mode) return;
+    setMode(m);
+    setSelectedId(null);
+  };
+
   const createSession = async () => {
-    const dir = await open({ directory: true, title: '选择工作目录' });
-    if (typeof dir !== 'string') return;
+    let workspace: string;
+    if (mode === 'chat') {
+      if (!chatWorkspace) {
+        setError('对话工作区尚未就绪，请稍候重试');
+        return;
+      }
+      workspace = chatWorkspace;
+    } else {
+      const dir = await open({ directory: true, title: '选择工作目录' });
+      if (typeof dir !== 'string') return;
+      workspace = dir;
+    }
     try {
-      const { id } = await api.createThread(dir);
+      const { id } = await api.createThread(workspace);
       await refresh();
       setSelectedId(id);
     } catch (err) {
@@ -125,12 +155,17 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
   };
 
   const selected = threads.find((t) => t.id === selectedId) ?? null;
+  const selectedIsChat = selected ? isChatThread(selected) : false;
 
   return (
     <div className="app-layout">
       <ThreadList
-        threads={threads}
+        threads={visibleThreads}
         selectedId={selectedId}
+        mode={mode}
+        onModeChange={switchMode}
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed((c) => !c)}
         onSelect={setSelectedId}
         onCreate={createSession}
         onArchive={archiveSession}
@@ -147,14 +182,18 @@ export default function MainScreen({ info }: { info: RuntimeInfo }) {
           info={info}
           threadId={selectedId}
           title={selected?.title || selected?.preview || selectedId}
-          workspace={selected?.workspace ?? null}
+          workspace={selectedIsChat ? null : (selected?.workspace ?? null)}
         />
       ) : (
         <div className="conversation">
           <div className="empty-state">
             <img className="empty-mark" src={epMark} alt="" />
             <h1>{greeting()}，欢迎回到 Ever Pretty</h1>
-            <p>从左侧选择一个会话，或新建会话开始今天的工作</p>
+            <p>
+              {mode === 'chat'
+                ? '直接开始新对话，无需选择工作目录'
+                : '新建代码会话并选择工作目录，让 agent 在项目中干活'}
+            </p>
           </div>
         </div>
       )}

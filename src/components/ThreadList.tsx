@@ -1,8 +1,8 @@
 import epMark from '../assets/ep-mark.png';
 import epWordmark from '../assets/ep-wordmark.png';
 import type { ThreadSummary } from '../lib/api';
-import type { UpdateBanner } from './MainScreen';
-import { DownloadIcon, PlusIcon, TrashIcon } from './Icons';
+import type { SessionMode, UpdateBanner } from './MainScreen';
+import { ChatIcon, CodeIcon, DownloadIcon, PanelLeftIcon, PlusIcon, TrashIcon } from './Icons';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -20,6 +20,10 @@ function timeAgo(iso: string): string {
 export default function ThreadList({
   threads,
   selectedId,
+  mode,
+  onModeChange,
+  collapsed,
+  onToggleCollapse,
   onSelect,
   onCreate,
   onArchive,
@@ -31,6 +35,10 @@ export default function ThreadList({
 }: {
   threads: ThreadSummary[];
   selectedId: string | null;
+  mode: SessionMode;
+  onModeChange: (m: SessionMode) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onSelect: (id: string) => void;
   onCreate: () => void;
   onArchive: (id: string) => void;
@@ -40,21 +48,61 @@ export default function ThreadList({
   error: string | null;
   enginePort: number;
 }) {
+  if (collapsed) {
+    return (
+      <div className="sidebar collapsed">
+        <button className="icon-btn" title="展开侧栏" onClick={onToggleCollapse}>
+          <PanelLeftIcon size={18} />
+        </button>
+        <button className="icon-btn new" title={mode === 'chat' ? '新对话' : '新建代码会话'} onClick={onCreate}>
+          <PlusIcon size={18} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="sidebar">
-      <div className="sidebar-brand">
-        <img className="brand-mark" src={epMark} alt="" />
-        <img className="brand-wordmark" src={epWordmark} alt="Ever Pretty" />
+      <div className="sidebar-top">
+        <div className="sidebar-brand">
+          <img className="brand-mark" src={epMark} alt="" />
+          <img className="brand-wordmark" src={epWordmark} alt="Ever Pretty" />
+        </div>
+        <button className="icon-btn" title="收起侧栏" onClick={onToggleCollapse}>
+          <PanelLeftIcon size={17} />
+        </button>
       </div>
+
+      <div className="mode-tabs">
+        <button
+          className={`mode-tab${mode === 'chat' ? ' active' : ''}`}
+          onClick={() => onModeChange('chat')}
+        >
+          <ChatIcon size={15} /> 对话
+        </button>
+        <button
+          className={`mode-tab${mode === 'code' ? ' active' : ''}`}
+          onClick={() => onModeChange('code')}
+        >
+          <CodeIcon size={15} /> 代码
+        </button>
+      </div>
+
       <button className="new-chat" onClick={onCreate}>
         <span className="new-chat-icon">
           <PlusIcon size={12} />
         </span>
-        新建会话
+        {mode === 'chat' ? '新对话' : '新建代码会话'}
       </button>
-      <div className="section-label">会话</div>
+
+      <div className="section-label">{mode === 'chat' ? '最近对话' : '代码会话'}</div>
       <div className="thread-scroll">
         {error && <p className="error-text sidebar-error">{error}</p>}
+        {threads.length === 0 && !error && (
+          <p className="sidebar-hint">
+            {mode === 'chat' ? '还没有对话，点上方新建' : '还没有代码会话，新建并选择工作目录'}
+          </p>
+        )}
         {threads.map((t) => {
           const when = timeAgo(t.updated_at);
           return (
@@ -73,11 +121,16 @@ export default function ThreadList({
             >
               <div className="thread-title">{t.title || t.preview || t.id}</div>
               <div className="thread-meta">
-                {t.workspace.split('/').pop()}
-                {t.branch ? ` · ${t.branch}` : ''}
-                {t.dirty ? ' ●' : ''}
-                {t.latest_turn_status === 'in_progress' ? ' · 运行中' : ''}
-                {when ? ` · ${when}` : ''}
+                {mode === 'code' && (
+                  <>
+                    {t.workspace.split('/').pop()}
+                    {t.branch ? ` · ${t.branch}` : ''}
+                    {t.dirty ? ' ●' : ''}
+                    {' · '}
+                  </>
+                )}
+                {t.latest_turn_status === 'in_progress' ? '运行中 · ' : ''}
+                {when}
               </div>
               <button
                 className="thread-archive"

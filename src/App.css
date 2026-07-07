@@ -138,7 +138,9 @@ button:focus-visible,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
 }
 
 .brand-mark {
@@ -157,6 +159,81 @@ button:focus-visible,
     /* 墨色 wordmark 深色下反相成米白 */
     filter: invert(0.92);
   }
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.icon-btn.new {
+  color: var(--accent);
+}
+
+/* 折叠态：细轨，只留展开与新建 */
+.sidebar.collapsed {
+  width: 52px;
+  align-items: center;
+  padding: 14px 0 10px;
+  gap: 6px;
+}
+
+/* Chat|Code 分段控件 */
+.mode-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin: 8px 2px 4px;
+  background: var(--bg-hover);
+  border-radius: 10px;
+}
+
+.mode-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 8px;
+}
+
+.mode-tab:hover {
+  color: var(--text);
+}
+
+.mode-tab.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sidebar-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 4px 10px;
+  line-height: 1.5;
 }
 
 .new-chat {

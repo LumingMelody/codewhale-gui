@@ -145,6 +145,18 @@ pub fn get_runtime_info(state: State<'_, SidecarState>) -> Option<RuntimeInfo> {
     state.info.lock().unwrap().clone()
 }
 
+/// Chat 模式的固定 scratch 工作区 ~/EverPretty（首次调用时创建）。
+/// 引擎每个 thread 都要一个 cwd；chat 用这个统一目录，不打扰用户选目录。
+#[tauri::command]
+pub fn ensure_chat_workspace(app: AppHandle) -> Result<String, String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    let dir = home.join("EverPretty");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建 chat 工作区失败: {e}"))?;
+    dir.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "chat 工作区路径非 UTF-8".to_string())
+}
+
 #[tauri::command]
 pub async fn restart_sidecar(app: AppHandle) -> Result<RuntimeInfo, String> {
     shutdown(&app);

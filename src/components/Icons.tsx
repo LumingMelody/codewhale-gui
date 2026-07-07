@@ -81,6 +81,32 @@ export function DownloadIcon({ size }: { size?: number }) {
   );
 }
 
+export function ChatIcon({ size }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
+    </Icon>
+  );
+}
+
+export function CodeIcon({ size }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <path d="m16 18 6-6-6-6" />
+      <path d="m8 6-6 6 6 6" />
+    </Icon>
+  );
+}
+
+export function PanelLeftIcon({ size }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+    </Icon>
+  );
+}
+
 export function TrashIcon({ size }: { size?: number }) {
   return (
     <Icon size={size}>
