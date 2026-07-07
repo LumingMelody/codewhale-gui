@@ -51,7 +51,7 @@ export default function App() {
     case 'booting':
       return <div className="center-screen">{phase.note}</div>;
     case 'wizard':
-      return <Wizard onDone={() => setPhase({ name: 'main', info: phase.info })} />;
+      return <Wizard onDone={(info) => setPhase({ name: 'main', info })} />;
     case 'crashed':
       return (
         <CrashScreen

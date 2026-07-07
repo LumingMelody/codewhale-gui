@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import type { RuntimeInfo } from '../lib/api';
 
-export default function Wizard({ onDone }: { onDone: () => void }) {
+export default function Wizard({ onDone }: { onDone: (info: RuntimeInfo) => void }) {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +16,10 @@ export default function Wizard({ onDone }: { onDone: () => void }) {
       if ((doctor.api_key?.source ?? 'missing') === 'missing') {
         throw new Error('key 已提交但 doctor 仍报 missing，请检查 key 是否有效');
       }
-      onDone();
+      // 引擎是在无 key 状态下启动的，provider 路由在引擎启动时构建，
+      // 必须重启引擎让新 key 生效，否则首次对话报 "API key not found"
+      const info = await invoke<RuntimeInfo>('restart_sidecar');
+      onDone(info);
     } catch (err) {
       setError(String(err));
     } finally {
