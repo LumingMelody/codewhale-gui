@@ -1,6 +1,6 @@
 [package]
 name = "codewhale-gui"
-version = "0.1.9"
+version = "0.1.10"
 description = "CodeWhale desktop workbench"
 authors = ["melodylu"]
 edition = "2021"
