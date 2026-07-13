@@ -1,16 +1,39 @@
 use serde::Serialize;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
+const ATTACHMENTS_DIR: &str = ".everpretty-attachments";
+const IMPORT_ATTACHMENT_LIMIT: u64 = 256 * 1024 * 1024;
+const SAVE_ATTACHMENT_LIMIT: usize = 25 * 1024 * 1024;
+const PREVIEW_ATTACHMENT_LIMIT: u64 = 10 * 1024 * 1024;
+
 #[derive(Clone, Serialize)]
 pub struct RuntimeInfo {
     pub base_url: String,
     pub token: String,
     pub port: u16,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AttachmentInfo {
+    pub rel: String,
+    pub name: String,
+    pub size: u64,
+    pub kind: String,
+    pub mime: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AttachmentPreview {
+    pub bytes: Vec<u8>,
+    pub mime: String,
 }
 
 #[derive(Default)]
@@ -91,7 +114,11 @@ pub async fn start(app: AppHandle) -> Result<RuntimeInfo, String> {
 
     wait_healthy(&base_url).await?;
 
-    let info = RuntimeInfo { base_url, token, port };
+    let info = RuntimeInfo {
+        base_url,
+        token,
+        port,
+    };
     let state = app.state::<SidecarState>();
     *state.info.lock().unwrap() = Some(info.clone());
     Ok(info)
@@ -157,20 +184,299 @@ pub fn ensure_chat_workspace(app: AppHandle) -> Result<String, String> {
         .ok_or_else(|| "chat 工作区路径非 UTF-8".to_string())
 }
 
-/// 把粘贴/拖入的图片字节写进 <workspace>/.everpretty-attachments/，返回**工作区内相对
-/// 路径**——引擎的 image_analyze 工具只接受工作区内相对路径（禁止逃逸）。
+/// 把 picker/原生拖放拿到的文件复制进 <workspace>/.everpretty-attachments/，
+/// 返回**工作区内相对路径**和元数据（禁止目标路径逃逸）。
 #[tauri::command]
-pub fn save_attachment(workspace: String, filename: String, bytes: Vec<u8>) -> Result<String, String> {
-    // 防目录穿越：只取纯文件名
-    let name = std::path::Path::new(&filename)
+pub async fn import_attachment(workspace: String, path: String) -> Result<AttachmentInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || import_attachment_sync(&workspace, &path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// 把剪贴板图片/小文件字节写进 <workspace>/.everpretty-attachments/。
+/// 路径导入优先；bytes 通道只承载小附件，避免 IPC 内存峰值过高。
+#[tauri::command]
+pub async fn save_attachment(
+    workspace: String,
+    filename: String,
+    bytes: Vec<u8>,
+) -> Result<AttachmentInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        save_attachment_bytes_sync(&workspace, &filename, &bytes)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// 受限读取附件缩略图：只允许读取附件目录下的小图片，不开放通用文件读取。
+#[tauri::command]
+pub async fn read_attachment_preview(
+    workspace: String,
+    rel: String,
+) -> Result<AttachmentPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || read_attachment_preview_sync(&workspace, &rel))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn import_attachment_sync(workspace: &str, source: &str) -> Result<AttachmentInfo, String> {
+    let source_path = PathBuf::from(source);
+    let metadata = source_path
+        .metadata()
+        .map_err(|e| format!("读取附件信息失败: {e}"))?;
+    if !metadata.is_file() {
+        return Err("只能添加普通文件，目录或特殊文件暂不支持".to_string());
+    }
+    if metadata.len() > IMPORT_ATTACHMENT_LIMIT {
+        return Err("单个附件不能超过 256 MiB".to_string());
+    }
+    let raw_name = source_path
         .file_name()
         .and_then(|s| s.to_str())
         .ok_or_else(|| "非法文件名".to_string())?;
-    let rel_dir = ".everpretty-attachments";
-    let dir = std::path::Path::new(&workspace).join(rel_dir);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("创建附件目录失败: {e}"))?;
-    std::fs::write(dir.join(name), &bytes).map_err(|e| format!("写入附件失败: {e}"))?;
-    Ok(format!("{rel_dir}/{name}"))
+    let name = sanitize_filename(raw_name);
+    let dir = attachment_dir(workspace)?;
+    let (mut dst, final_name) = create_unique_file(&dir, &name)?;
+    let copy_result = File::open(&source_path)
+        .and_then(|mut src| std::io::copy(&mut src, &mut dst))
+        .and_then(|_| dst.flush());
+    if let Err(e) = copy_result {
+        let _ = fs::remove_file(dir.join(&final_name));
+        return Err(format!("复制附件失败: {e}"));
+    }
+    Ok(attachment_info(final_name, metadata.len()))
+}
+
+fn save_attachment_bytes_sync(
+    workspace: &str,
+    filename: &str,
+    bytes: &[u8],
+) -> Result<AttachmentInfo, String> {
+    if bytes.len() > SAVE_ATTACHMENT_LIMIT {
+        return Err("剪贴板附件不能超过 25 MiB，请改用附件按钮或拖入文件".to_string());
+    }
+    ensure_plain_filename(filename)?;
+    let name = sanitize_filename(filename);
+    let dir = attachment_dir(workspace)?;
+    let (mut file, final_name) = create_unique_file(&dir, &name)?;
+    if let Err(e) = file.write_all(bytes).and_then(|_| file.flush()) {
+        let _ = fs::remove_file(dir.join(&final_name));
+        return Err(format!("写入附件失败: {e}"));
+    }
+    Ok(attachment_info(final_name, bytes.len() as u64))
+}
+
+fn read_attachment_preview_sync(workspace: &str, rel: &str) -> Result<AttachmentPreview, String> {
+    let path = resolve_attachment_rel(workspace, rel)?;
+    let metadata = path
+        .metadata()
+        .map_err(|e| format!("读取附件信息失败: {e}"))?;
+    if !metadata.is_file() {
+        return Err("只能预览普通文件".to_string());
+    }
+    if metadata.len() > PREVIEW_ATTACHMENT_LIMIT {
+        return Err("图片超过 10 MiB，已改用文件图标显示".to_string());
+    }
+    if !is_image_name(&path.to_string_lossy()) {
+        return Err("该附件不是可预览图片".to_string());
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    File::open(&path)
+        .and_then(|mut f| f.read_to_end(&mut bytes))
+        .map_err(|e| format!("读取预览失败: {e}"))?;
+    Ok(AttachmentPreview {
+        bytes,
+        mime: mime_for_name(&path.to_string_lossy())
+            .unwrap_or("application/octet-stream")
+            .to_string(),
+    })
+}
+
+fn attachment_dir(workspace: &str) -> Result<PathBuf, String> {
+    let workspace = Path::new(workspace)
+        .canonicalize()
+        .map_err(|e| format!("工作区路径无效: {e}"))?;
+    let dir = workspace.join(ATTACHMENTS_DIR);
+    fs::create_dir_all(&dir).map_err(|e| format!("创建附件目录失败: {e}"))?;
+    let dir = dir
+        .canonicalize()
+        .map_err(|e| format!("附件目录路径无效: {e}"))?;
+    if !dir.starts_with(&workspace) {
+        return Err("附件目录不能位于工作区外".to_string());
+    }
+    Ok(dir)
+}
+
+fn resolve_attachment_rel(workspace: &str, rel: &str) -> Result<PathBuf, String> {
+    let rel_path = Path::new(rel);
+    let mut components = rel_path.components();
+    match components.next() {
+        Some(Component::Normal(part)) if part == ATTACHMENTS_DIR => {}
+        _ => return Err("预览路径必须位于附件目录下".to_string()),
+    }
+    for component in components {
+        match component {
+            Component::Normal(_) => {}
+            _ => return Err("附件路径不能包含目录穿越".to_string()),
+        }
+    }
+
+    let workspace = Path::new(workspace)
+        .canonicalize()
+        .map_err(|e| format!("工作区路径无效: {e}"))?;
+    let dir = attachment_dir(workspace.to_string_lossy().as_ref())?;
+    let path = workspace.join(rel_path);
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("附件路径无效: {e}"))?;
+    if !canonical.starts_with(&dir) {
+        return Err("附件路径不能逃逸附件目录".to_string());
+    }
+    Ok(canonical)
+}
+
+fn ensure_plain_filename(filename: &str) -> Result<(), String> {
+    if filename.trim().is_empty() {
+        return Err("非法文件名".to_string());
+    }
+    if filename.contains('/') || filename.contains('\\') {
+        return Err("文件名不能包含路径分隔符".to_string());
+    }
+    let path = Path::new(filename);
+    let mut components = path.components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(()),
+        _ => Err("文件名不能包含目录穿越".to_string()),
+    }
+}
+
+fn sanitize_filename(filename: &str) -> String {
+    let mut cleaned = String::with_capacity(filename.len());
+    for ch in filename.chars() {
+        if ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') {
+            cleaned.push('_');
+        } else {
+            cleaned.push(ch);
+        }
+    }
+    let cleaned = cleaned.trim().trim_end_matches(['.', ' ']).to_string();
+    let cleaned = if cleaned.is_empty() {
+        "attachment".to_string()
+    } else {
+        cleaned
+    };
+    let (stem, ext) = split_name_ext(&cleaned);
+    let stem = stem.trim_end_matches(['.', ' ']);
+    let stem = if stem.trim_matches(['.', ' ', '_']).is_empty() {
+        "attachment"
+    } else {
+        stem
+    };
+    let ext = if ext
+        .strip_prefix('.')
+        .is_some_and(|s| s.chars().any(char::is_alphanumeric))
+    {
+        ext
+    } else {
+        ""
+    };
+    let reserved = is_windows_reserved_name(stem);
+    let stem = if reserved {
+        format!("_{stem}")
+    } else {
+        stem.to_string()
+    };
+    format!("{stem}{ext}")
+}
+
+fn create_unique_file(dir: &Path, name: &str) -> Result<(File, String), String> {
+    let (stem, ext) = split_name_ext(name);
+    for index in 0..10_000 {
+        let candidate = if index == 0 {
+            name.to_string()
+        } else {
+            format!("{stem}-{index}{ext}")
+        };
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dir.join(&candidate))
+        {
+            Ok(file) => return Ok((file, candidate)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("创建附件失败: {e}")),
+        }
+    }
+    Err("附件重名过多，无法创建唯一文件名".to_string())
+}
+
+fn attachment_info(name: String, size: u64) -> AttachmentInfo {
+    let kind = if is_image_name(&name) {
+        "image"
+    } else {
+        "file"
+    };
+    AttachmentInfo {
+        rel: format!("{ATTACHMENTS_DIR}/{name}"),
+        mime: mime_for_name(&name).map(str::to_string),
+        name,
+        size,
+        kind: kind.to_string(),
+    }
+}
+
+fn split_name_ext(name: &str) -> (&str, &str) {
+    match name.rfind('.') {
+        Some(0) | None => (name, ""),
+        Some(i) if i + 1 == name.len() => (&name[..i], ""),
+        Some(i) => (&name[..i], &name[i..]),
+    }
+}
+
+fn is_windows_reserved_name(stem: &str) -> bool {
+    let upper = stem.trim_end_matches(['.', ' ']).to_ascii_uppercase();
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || upper
+            .strip_prefix("COM")
+            .and_then(|s| s.parse::<u8>().ok())
+            .is_some_and(|n| (1..=9).contains(&n))
+        || upper
+            .strip_prefix("LPT")
+            .and_then(|s| s.parse::<u8>().ok())
+            .is_some_and(|n| (1..=9).contains(&n))
+}
+
+fn is_image_name(name: &str) -> bool {
+    matches!(
+        Path::new(name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .as_deref(),
+        Some("png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tiff")
+    )
+}
+
+fn mime_for_name(name: &str) -> Option<&'static str> {
+    match Path::new(name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => Some("image/png"),
+        Some("jpg" | "jpeg") => Some("image/jpeg"),
+        Some("webp") => Some("image/webp"),
+        Some("gif") => Some("image/gif"),
+        Some("bmp") => Some("image/bmp"),
+        Some("tiff") => Some("image/tiff"),
+        Some("txt") => Some("text/plain"),
+        Some("json") => Some("application/json"),
+        Some("pdf") => Some("application/pdf"),
+        Some("csv") => Some("text/csv"),
+        Some("md") => Some("text/markdown"),
+        _ => None,
+    }
 }
 
 #[tauri::command]
@@ -238,6 +544,7 @@ pub async fn set_api_key(api_key: String) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn pick_port_prefers_free_preferred() {
@@ -255,5 +562,73 @@ mod tests {
         let picked = pick_port(occupied); // holder 仍持有
         assert_ne!(picked, occupied);
         assert_ne!(picked, 0);
+    }
+
+    #[test]
+    fn attachment_filename_sanitizes_windows_rules_and_keeps_chinese() {
+        assert_eq!(sanitize_filename("报 告<1>.txt"), "报 告_1_.txt");
+        assert_eq!(sanitize_filename("CON.txt"), "_CON.txt");
+        assert_eq!(sanitize_filename("LPT9"), "_LPT9");
+        assert_eq!(sanitize_filename("...\u{0001}"), "attachment");
+    }
+
+    #[test]
+    fn attachment_same_name_gets_incrementing_suffix() {
+        let workspace = temp_workspace("same-name");
+
+        let first =
+            save_attachment_bytes_sync(workspace.to_str().unwrap(), "报告.txt", b"first").unwrap();
+        let second =
+            save_attachment_bytes_sync(workspace.to_str().unwrap(), "报告.txt", b"second").unwrap();
+
+        assert_eq!(first.rel, ".everpretty-attachments/报告.txt");
+        assert_eq!(second.rel, ".everpretty-attachments/报告-1.txt");
+        assert_eq!(
+            fs::read_to_string(workspace.join(&second.rel)).unwrap(),
+            "second"
+        );
+
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn attachment_import_rejects_directory() {
+        let workspace = temp_workspace("reject-dir");
+        let dir = workspace.join("folder");
+        fs::create_dir_all(&dir).unwrap();
+
+        let err =
+            import_attachment_sync(workspace.to_str().unwrap(), dir.to_str().unwrap()).unwrap_err();
+
+        assert!(err.contains("普通文件"));
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn attachment_rejects_traversal_paths() {
+        let workspace = temp_workspace("reject-traversal");
+
+        let err = save_attachment_bytes_sync(workspace.to_str().unwrap(), "../evil.txt", b"x")
+            .unwrap_err();
+        assert!(err.contains("路径分隔符") || err.contains("目录穿越"));
+
+        let err = read_attachment_preview_sync(
+            workspace.to_str().unwrap(),
+            ".everpretty-attachments/../evil.png",
+        )
+        .unwrap_err();
+        assert!(err.contains("目录穿越"));
+
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    fn temp_workspace(name: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("codewhale-{name}-{stamp}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
 }

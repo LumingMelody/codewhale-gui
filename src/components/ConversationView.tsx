@@ -1,16 +1,74 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { open } from '@tauri-apps/plugin-dialog';
 import type { ApiClient, RuntimeInfo } from '../lib/api';
 import { subscribeThreadEvents } from '../lib/events';
 import { initialThreadView, threadReducer } from '../state/threadReducer';
 import ApprovalModal from './ApprovalModal';
-import { ArrowUpIcon } from './Icons';
+import { ArrowUpIcon, FileIcon, ImageIcon, PaperclipIcon } from './Icons';
 import ItemView from './ItemView';
 
+type AttachmentKind = 'image' | 'file';
+type AttachmentSource = 'paste' | 'drop' | 'picker';
+
 interface Attachment {
-  rel: string; // 工作区内相对路径，供 image_analyze 使用
+  rel: string; // 工作区内相对路径，供 image_analyze/agent 读取使用
   name: string;
-  preview: string; // object URL，仅用于缩略图
+  kind: AttachmentKind;
+  size: number;
+  mime?: string;
+  previewUrl?: string; // object URL，仅用于缩略图
+  source: AttachmentSource;
+}
+
+interface AttachmentInfo {
+  rel: string;
+  name: string;
+  kind: AttachmentKind;
+  size: number;
+  mime?: string | null;
+}
+
+interface AttachmentPreview {
+  bytes: number[];
+  mime: string;
+}
+
+const MAX_BATCH_FILES = 50;
+const MAX_CLIPBOARD_FILE_SIZE = 25 * 1024 * 1024;
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff']);
+
+function isImageName(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase();
+  return ext ? IMAGE_EXTENSIONS.has(ext) : false;
+}
+
+function kindFromInfo(info: AttachmentInfo): AttachmentKind {
+  return info.kind === 'image' || isImageName(info.name) ? 'image' : 'file';
+}
+
+function formatFileSize(size: number): string {
+  if (size < 1024) return `${size} B`;
+  const units = ['KiB', 'MiB', 'GiB'];
+  let value = size / 1024;
+  for (const unit of units) {
+    if (value < 1024) return `${value.toFixed(value < 10 ? 1 : 0)} ${unit}`;
+    value /= 1024;
+  }
+  return `${value.toFixed(1)} TiB`;
+}
+
+function fallbackClipboardName(file: File): string {
+  if (file.name) return file.name;
+  const ext = file.type.startsWith('image/')
+    ? file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
+    : 'bin';
+  return `paste-${Date.now()}.${ext}`;
+}
+
+function revokeAttachmentPreview(attachment: Attachment) {
+  if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
 }
 
 export default function ConversationView({
@@ -34,8 +92,19 @@ export default function ConversationView({
   const [steering, setSteering] = useState(false);
   const [connState, setConnState] = useState<'open' | 'reconnecting'>('open');
   const [sendError, setSendError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [importing, setImporting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const attachmentsRef = useRef<Attachment[]>([]);
+
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  useEffect(() => {
+    return () => attachmentsRef.current.forEach(revokeAttachmentPreview);
+  }, []);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -59,51 +128,165 @@ export default function ConversationView({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [state.items]);
 
-  const addImage = async (file: File) => {
+  const hydratePreview = useCallback(
+    async (info: AttachmentInfo, source: AttachmentSource, previewFile?: File): Promise<Attachment> => {
+      const kind = kindFromInfo(info);
+      let previewUrl: string | undefined;
+      if (kind === 'image') {
+        if (previewFile) {
+          previewUrl = URL.createObjectURL(previewFile);
+        } else if (workspacePath) {
+          try {
+            const preview = await invoke<AttachmentPreview>('read_attachment_preview', {
+              workspace: workspacePath,
+              rel: info.rel,
+            });
+            previewUrl = URL.createObjectURL(
+              new Blob([Uint8Array.from(preview.bytes)], { type: preview.mime }),
+            );
+          } catch {
+            // 大图或不支持预览时降级为图标 chip，不影响发送。
+          }
+        }
+      }
+      return {
+        rel: info.rel,
+        name: info.name,
+        kind,
+        size: info.size,
+        mime: info.mime ?? undefined,
+        previewUrl,
+        source,
+      };
+    },
+    [workspacePath],
+  );
+
+  const importPaths = useCallback(
+    async (paths: string[], source: AttachmentSource) => {
+      if (!workspacePath) {
+        setSendError('工作区未就绪，暂时无法添加附件');
+        return;
+      }
+      if (paths.length === 0) return;
+      if (paths.length > MAX_BATCH_FILES) {
+        setSendError(`单次最多添加 ${MAX_BATCH_FILES} 个附件`);
+        return;
+      }
+      setImporting(true);
+      const added: Attachment[] = [];
+      const errors: string[] = [];
+      for (const path of paths) {
+        try {
+          const info = await invoke<AttachmentInfo>('import_attachment', {
+            workspace: workspacePath,
+            path,
+          });
+          added.push(await hydratePreview(info, source));
+        } catch (err) {
+          errors.push(String(err));
+        }
+      }
+      if (added.length > 0) {
+        setAttachments((current) => [...current, ...added]);
+      }
+      setSendError(errors.length > 0 ? `添加附件失败: ${errors[0]}` : null);
+      setImporting(false);
+    },
+    [hydratePreview, workspacePath],
+  );
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type === 'enter' || payload.type === 'over') {
+          setDragActive(true);
+          return;
+        }
+        if (payload.type === 'leave') {
+          setDragActive(false);
+          return;
+        }
+        setDragActive(false);
+        void importPaths(payload.paths, 'drop');
+      })
+      .then((fn) => {
+        if (cancelled) {
+          fn();
+        } else {
+          unlisten = fn;
+        }
+      })
+      .catch((err) => setSendError(`拖放监听初始化失败: ${String(err)}`));
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [importPaths]);
+
+  const addClipboardFile = async (file: File) => {
     if (!workspacePath) {
-      setSendError('工作区未就绪，暂时无法添加图片');
+      setSendError('工作区未就绪，暂时无法添加附件');
+      return;
+    }
+    const isImage = file.type.startsWith('image/') || isImageName(file.name);
+    if (file.size > MAX_CLIPBOARD_FILE_SIZE) {
+      setSendError(isImage ? '剪贴板图片超过 25 MiB' : '剪贴板文件超过 25 MiB，请用附件按钮或拖入文件');
       return;
     }
     try {
-      const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
-      // 前端可用 Date.now；文件名唯一即可
-      const filename = `paste-${Date.now()}-${attachments.length}.${ext}`;
+      const filename = fallbackClipboardName(file);
       const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-      const rel = await invoke<string>('save_attachment', {
+      const info = await invoke<AttachmentInfo>('save_attachment', {
         workspace: workspacePath,
         filename,
         bytes,
       });
-      setAttachments((a) => [...a, { rel, name: filename, preview: URL.createObjectURL(file) }]);
+      const attachment = await hydratePreview(info, 'paste', isImage ? file : undefined);
+      setAttachments((a) => [...a, attachment]);
       setSendError(null);
     } catch (err) {
-      setSendError(`添加图片失败: ${String(err)}`);
+      setSendError(`添加附件失败: ${String(err)}`);
     }
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
-    const imgs = Array.from(e.clipboardData.items).filter((i) => i.type.startsWith('image/'));
-    if (imgs.length === 0) return;
-    e.preventDefault();
-    for (const item of imgs) {
-      const file = item.getAsFile();
-      if (file) addImage(file);
-    }
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    const files = Array.from(e.clipboardData.items)
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
     if (files.length === 0) return;
     e.preventDefault();
-    files.forEach(addImage);
+    if (files.length > MAX_BATCH_FILES) {
+      setSendError(`单次最多添加 ${MAX_BATCH_FILES} 个附件`);
+      return;
+    }
+    files.forEach((file) => void addClipboardFile(file));
   };
 
   const removeAttachment = (rel: string) => {
     setAttachments((a) => {
       const hit = a.find((x) => x.rel === rel);
-      if (hit) URL.revokeObjectURL(hit.preview);
+      if (hit) revokeAttachmentPreview(hit);
       return a.filter((x) => x.rel !== rel);
     });
+  };
+
+  const chooseAttachments = async () => {
+    try {
+      const selected = await open({
+        multiple: true,
+        directory: false,
+        title: '选择附件',
+      });
+      if (!selected) return;
+      const paths = Array.isArray(selected) ? selected : [selected];
+      await importPaths(paths, 'picker');
+    } catch (err) {
+      setSendError(`选择附件失败: ${String(err)}`);
+    }
   };
 
   const send = async () => {
@@ -112,16 +295,28 @@ export default function ConversationView({
 
     let prompt = text;
     if (attachments.length > 0) {
-      const refs = attachments.map((a) => `- ${a.rel}`).join('\n');
-      prompt =
-        `[我发送了 ${attachments.length} 张图片，请用 image_analyze 工具查看（路径相对工作区）]\n` +
-        `${refs}\n\n${text}`.trim();
+      const images = attachments.filter((a) => a.kind === 'image');
+      const files = attachments.filter((a) => a.kind === 'file');
+      const parts: string[] = [];
+      if (images.length > 0) {
+        parts.push(
+          `图片附件（请用 image_analyze 查看，路径相对工作区）：\n${images
+            .map((a) => `- ${a.rel}`)
+            .join('\n')}`,
+        );
+      }
+      if (files.length > 0) {
+        parts.push(
+          `普通文件附件（请直接按工作区相对路径读取/处理）：\n${files
+            .map((a) => `- ${a.rel}`)
+            .join('\n')}`,
+        );
+      }
+      prompt = `${parts.join('\n\n')}${text ? `\n\n${text}` : ''}`.trim();
     }
 
-    setDraft('');
-    attachments.forEach((a) => URL.revokeObjectURL(a.preview));
-    setAttachments([]);
     setSendError(null);
+    const sentRels = new Set(attachments.map((a) => a.rel));
     try {
       if (steering && state.activeTurnId) {
         await api.steerTurn(threadId, state.activeTurnId, prompt);
@@ -129,13 +324,19 @@ export default function ConversationView({
       } else {
         await api.startTurn(threadId, prompt);
       }
+      setDraft((current) => (current.trim() === text ? '' : current));
+      setAttachments((current) => {
+        current.forEach((a) => {
+          if (sentRels.has(a.rel)) revokeAttachmentPreview(a);
+        });
+        return current.filter((a) => !sentRels.has(a.rel));
+      });
     } catch (err) {
       setSendError(String(err));
-      setDraft(text);
     }
   };
 
-  const canSend = draft.trim().length > 0 || attachments.length > 0;
+  const canSend = !importing && (draft.trim().length > 0 || attachments.length > 0);
 
   return (
     <div className="conversation">
@@ -177,12 +378,26 @@ export default function ConversationView({
             </label>
           </div>
         )}
-        <div className="composer-card" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+        <div className={`composer-card${dragActive ? ' drag-active' : ''}`}>
           {attachments.length > 0 && (
             <div className="attachment-strip">
               {attachments.map((a) => (
-                <div key={a.rel} className="attachment-chip">
-                  <img src={a.preview} alt={a.name} />
+                <div key={a.rel} className={`attachment-chip ${a.kind}`}>
+                  <div className="attachment-thumb">
+                    {a.kind === 'image' && a.previewUrl ? (
+                      <img src={a.previewUrl} alt={a.name} />
+                    ) : a.kind === 'image' ? (
+                      <ImageIcon size={18} />
+                    ) : (
+                      <FileIcon size={18} />
+                    )}
+                  </div>
+                  <div className="attachment-meta">
+                    <span className="attachment-name" title={a.name}>
+                      {a.name}
+                    </span>
+                    <span className="attachment-size">{formatFileSize(a.size)}</span>
+                  </div>
                   <button
                     className="attachment-remove"
                     title="移除"
@@ -208,14 +423,26 @@ export default function ConversationView({
               e.preventDefault();
               send();
             }}
-            placeholder={steering ? '给运行中的 agent 追加指令…' : '输入消息，可粘贴或拖入图片…'}
+            placeholder={steering ? '给运行中的 agent 追加指令…' : '输入消息，可粘贴图片、拖入文件或点附件…'}
             rows={1}
           />
           <div className="composer-row">
-            <span className="composer-hint">⏎ 发送 · ⇧⏎ 换行 · 可粘贴图片</span>
-            <button className="send-btn" onClick={send} disabled={!canSend} title="发送">
-              <ArrowUpIcon size={16} />
-            </button>
+            <span className="composer-hint">
+              ⏎ 发送 · ⇧⏎ 换行 · 可粘贴图片、拖入文件或点附件
+            </span>
+            <div className="composer-actions">
+              <button
+                className="attach-btn"
+                onClick={chooseAttachments}
+                disabled={importing}
+                title="添加附件"
+              >
+                <PaperclipIcon size={16} />
+              </button>
+              <button className="send-btn" onClick={send} disabled={!canSend} title="发送">
+                <ArrowUpIcon size={16} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

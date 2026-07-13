@@ -21,6 +21,8 @@ pub fn run() {
             sidecar::set_api_key,
             sidecar::ensure_chat_workspace,
             sidecar::save_attachment,
+            sidecar::import_attachment,
+            sidecar::read_attachment_preview,
             vision_config::vision_status,
             vision_config::set_vision_key,
         ])
