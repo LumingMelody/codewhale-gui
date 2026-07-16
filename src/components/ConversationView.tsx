@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { ApiClient, RuntimeInfo } from '../lib/api';
+import { diffWorkspaceFiles, type WorkspaceFileInfo } from '../lib/artifacts';
+import type { ThreadEvent } from '../lib/events';
 import { subscribeThreadEvents } from '../lib/events';
 import { initialThreadView, threadReducer } from '../state/threadReducer';
 import ApprovalModal from './ApprovalModal';
+import ArtifactList from './ArtifactList';
 import { ArrowUpIcon, FileIcon, ImageIcon, PaperclipIcon } from './Icons';
 import ItemView from './ItemView';
 
@@ -94,9 +97,12 @@ export default function ConversationView({
   const [sendError, setSendError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [artifactsByTurn, setArtifactsByTurn] = useState<Record<string, WorkspaceFileInfo[]>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachmentsRef = useRef<Attachment[]>([]);
+  const turnBaselinesRef = useRef(new Map<string, WorkspaceFileInfo[]>());
+  const pendingBaselineRef = useRef<WorkspaceFileInfo[] | null>(null);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -113,16 +119,51 @@ export default function ConversationView({
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [draft]);
 
+  const finishArtifactCapture = useCallback(
+    async (turnId: string) => {
+      const before = turnBaselinesRef.current.get(turnId);
+      if (!before || !workspacePath) return;
+      turnBaselinesRef.current.delete(turnId);
+      try {
+        const after = await invoke<WorkspaceFileInfo[]>('list_workspace_files', {
+          workspace: workspacePath,
+        });
+        const changed = diffWorkspaceFiles(before, after);
+        if (changed.length > 0) {
+          setArtifactsByTurn((current) => ({ ...current, [turnId]: changed }));
+        }
+      } catch (error) {
+        setSendError(`读取生成文件失败: ${String(error)}`);
+      }
+    },
+    [workspacePath],
+  );
+
+  const onThreadEvent = useCallback(
+    (event: ThreadEvent) => {
+      dispatch(event);
+      const turnId = event.turn_id;
+      if (!turnId) return;
+      if (event.kind === 'turn.started' && pendingBaselineRef.current) {
+        turnBaselinesRef.current.set(turnId, pendingBaselineRef.current);
+        pendingBaselineRef.current = null;
+      } else if (event.kind === 'turn.completed') {
+        void finishArtifactCapture(turnId);
+      }
+    },
+    [finishArtifactCapture],
+  );
+
   useEffect(() => {
     return subscribeThreadEvents({
       baseUrl: info.base_url,
       token: info.token,
       threadId,
       sinceSeq: 0,
-      onEvent: dispatch,
+      onEvent: onThreadEvent,
       onStatus: setConnState,
     });
-  }, [info, threadId]);
+  }, [info, onThreadEvent, threadId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -322,7 +363,21 @@ export default function ConversationView({
         await api.steerTurn(threadId, state.activeTurnId, prompt);
         setSteering(false);
       } else {
-        await api.startTurn(threadId, prompt);
+        if (workspacePath) {
+          try {
+            pendingBaselineRef.current = await invoke<WorkspaceFileInfo[]>('list_workspace_files', {
+              workspace: workspacePath,
+            });
+          } catch {
+            pendingBaselineRef.current = null;
+          }
+        }
+        const started = await api.startTurn(threadId, prompt);
+        const startedTurnId = started.id ?? started.turn?.id;
+        if (startedTurnId && pendingBaselineRef.current) {
+          turnBaselinesRef.current.set(startedTurnId, pendingBaselineRef.current);
+          pendingBaselineRef.current = null;
+        }
       }
       setDraft((current) => (current.trim() === text ? '' : current));
       setAttachments((current) => {
@@ -332,6 +387,7 @@ export default function ConversationView({
         return current.filter((a) => !sentRels.has(a.rel));
       });
     } catch (err) {
+      pendingBaselineRef.current = null;
       setSendError(String(err));
     }
   };
@@ -353,9 +409,19 @@ export default function ConversationView({
       )}
       <div className="items">
         <div className="items-inner">
-          {state.items.map((item) => (
-            <ItemView key={item.id} item={item} />
-          ))}
+          {state.items.map((item, index) => {
+            const next = state.items[index + 1];
+            const isTurnEnd = item.turnId && next?.turnId !== item.turnId;
+            const artifacts = item.turnId ? artifactsByTurn[item.turnId] : undefined;
+            return (
+              <Fragment key={item.id}>
+                <ItemView item={item} />
+                {isTurnEnd && artifacts && (
+                  <ArtifactList files={artifacts} onError={setSendError} />
+                )}
+              </Fragment>
+            );
+          })}
           <div ref={bottomRef} />
         </div>
       </div>

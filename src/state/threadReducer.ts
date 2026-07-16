@@ -70,7 +70,14 @@ function upsertItem(
 ): ConversationItem[] {
   const idx = items.findIndex((it) => it.id === next.id);
   if (idx === -1) return [...items, next];
-  const merged = { ...items[idx], ...next, text: next.text || items[idx].text };
+  const current = items[idx];
+  const merged = {
+    ...current,
+    ...next,
+    text: next.text || current.text,
+    // completed/failed 事件通常不再携带 payload.tool；保留 started 中的工具名和输入。
+    metadata: { ...current.metadata, ...next.metadata },
+  };
   return items.map((it, i) => (i === idx ? merged : it));
 }
 

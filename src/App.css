@@ -517,7 +517,7 @@ button:focus-visible,
   gap: 8px;
 }
 
-.tool-block pre {
+.tool-block > pre {
   margin: 0;
   padding: 10px 14px;
   border-top: 1px solid var(--border);
@@ -526,6 +526,183 @@ button:focus-visible,
   overflow-x: auto;
   max-height: 320px;
   overflow-y: auto;
+}
+
+.tool-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.tool-title strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tool-detail {
+  border-top: 1px solid var(--border);
+  padding: 4px 0;
+}
+
+.tool-detail section > span {
+  display: block;
+  padding: 7px 14px 2px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tool-detail pre {
+  margin: 0;
+  padding: 4px 14px 9px;
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tool-error-detail {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
+}
+
+.task-progress-row {
+  margin: 2px 0 16px;
+  width: min(360px, 100%);
+}
+
+.task-progress-copy {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.task-progress-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.task-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.artifact-panel {
+  margin: -4px 0 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg-elevated));
+}
+
+.artifact-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.artifact-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 10px;
+}
+
+.artifact-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+}
+
+.artifact-card + .artifact-card {
+  border-top: 1px solid var(--border);
+}
+
+.artifact-file-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.artifact-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.artifact-copy strong,
+.artifact-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.artifact-copy span {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.artifact-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.artifact-actions button {
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.artifact-actions button:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--bg-hover);
+}
+
+@media (max-width: 700px) {
+  .artifact-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .artifact-actions {
+    grid-column: 2;
+  }
 }
 
 .tool-icon {

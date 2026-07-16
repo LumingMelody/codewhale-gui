@@ -13,6 +13,8 @@ const ATTACHMENTS_DIR: &str = ".everpretty-attachments";
 const IMPORT_ATTACHMENT_LIMIT: u64 = 256 * 1024 * 1024;
 const SAVE_ATTACHMENT_LIMIT: usize = 25 * 1024 * 1024;
 const PREVIEW_ATTACHMENT_LIMIT: u64 = 10 * 1024 * 1024;
+const WORKSPACE_SCAN_FILE_LIMIT: usize = 20_000;
+const WORKSPACE_SCAN_ENTRY_LIMIT: usize = 100_000;
 
 #[derive(Clone, Serialize)]
 pub struct RuntimeInfo {
@@ -34,6 +36,16 @@ pub struct AttachmentInfo {
 pub struct AttachmentPreview {
     pub bytes: Vec<u8>,
     pub mime: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct WorkspaceFileInfo {
+    pub rel: String,
+    pub name: String,
+    pub path: String,
+    pub directory: String,
+    pub size: u64,
+    pub modified_ms: u128,
 }
 
 #[derive(Default)]
@@ -217,6 +229,107 @@ pub async fn read_attachment_preview(
     tauri::async_runtime::spawn_blocking(move || read_attachment_preview_sync(&workspace, &rel))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// 返回工作区内可用于产物 diff 的普通文件快照。跳过依赖、VCS、构建缓存、隐藏目录和符号链接，
+/// 防止扫描逃逸工作区或在大型仓库中无限遍历。
+#[tauri::command]
+pub async fn list_workspace_files(workspace: String) -> Result<Vec<WorkspaceFileInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_workspace_files_sync(&workspace))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn list_workspace_files_sync(workspace: &str) -> Result<Vec<WorkspaceFileInfo>, String> {
+    use std::time::UNIX_EPOCH;
+
+    let root = Path::new(workspace)
+        .canonicalize()
+        .map_err(|e| format!("工作区路径无效: {e}"))?;
+    if !root.is_dir() {
+        return Err("工作区不是目录".to_string());
+    }
+
+    let mut pending = vec![root.clone()];
+    let mut files = Vec::new();
+    let mut visited_entries = 0usize;
+    'walk: while let Some(dir) = pending.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            visited_entries += 1;
+            if files.len() >= WORKSPACE_SCAN_FILE_LIMIT
+                || visited_entries >= WORKSPACE_SCAN_ENTRY_LIMIT
+            {
+                break 'walk;
+            }
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(_) => continue,
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            let name = entry.file_name();
+            let name_lossy = name.to_string_lossy();
+            if file_type.is_dir() {
+                if should_skip_workspace_dir(&name_lossy) {
+                    continue;
+                }
+                pending.push(entry.path());
+                continue;
+            }
+            if !file_type.is_file() || name_lossy.starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            };
+            let rel = match path.strip_prefix(&root).ok().and_then(Path::to_str) {
+                Some(rel) => rel.to_string(),
+                None => continue,
+            };
+            let directory = path
+                .parent()
+                .and_then(Path::to_str)
+                .unwrap_or(workspace)
+                .to_string();
+            let modified_ms = metadata
+                .modified()
+                .ok()
+                .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis())
+                .unwrap_or(0);
+            files.push(WorkspaceFileInfo {
+                rel,
+                name: name_lossy.into_owned(),
+                path: path.to_string_lossy().into_owned(),
+                directory,
+                size: metadata.len(),
+                modified_ms,
+            });
+        }
+    }
+    Ok(files)
+}
+
+fn should_skip_workspace_dir(name: &str) -> bool {
+    name.starts_with('.')
+        || matches!(
+            name,
+            "node_modules"
+                | "target"
+                | "dist"
+                | "build"
+                | "out"
+                | "coverage"
+                | "__pycache__"
+                | "venv"
+        )
 }
 
 fn import_attachment_sync(workspace: &str, source: &str) -> Result<AttachmentInfo, String> {
@@ -618,6 +731,42 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("目录穿越"));
+
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn workspace_snapshot_lists_outputs_and_skips_heavy_or_hidden_dirs() {
+        let workspace = temp_workspace("workspace-snapshot");
+        fs::write(workspace.join("供应链培训.pptx"), b"ppt").unwrap();
+        fs::create_dir_all(workspace.join("reports")).unwrap();
+        fs::write(workspace.join("reports/result.pdf"), b"pdf").unwrap();
+        fs::create_dir_all(workspace.join("node_modules/pkg")).unwrap();
+        fs::write(workspace.join("node_modules/pkg/ignored.pdf"), b"ignored").unwrap();
+        fs::create_dir_all(workspace.join(".everpretty-attachments")).unwrap();
+        fs::write(
+            workspace.join(".everpretty-attachments/input.png"),
+            b"input",
+        )
+        .unwrap();
+
+        let files = list_workspace_files_sync(workspace.to_str().unwrap()).unwrap();
+        let rels: Vec<_> = files.iter().map(|file| file.rel.as_str()).collect();
+
+        assert!(rels.contains(&"供应链培训.pptx"));
+        assert!(rels.contains(&"reports/result.pdf"));
+        assert!(!rels.iter().any(|rel| rel.contains("node_modules")));
+        assert!(!rels
+            .iter()
+            .any(|rel| rel.contains(".everpretty-attachments")));
+        let ppt = files
+            .iter()
+            .find(|file| file.name == "供应链培训.pptx")
+            .unwrap();
+        assert_eq!(
+            ppt.directory,
+            workspace.canonicalize().unwrap().to_string_lossy()
+        );
 
         let _ = fs::remove_dir_all(workspace);
     }

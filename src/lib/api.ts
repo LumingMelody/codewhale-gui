@@ -49,7 +49,14 @@ export class ApiClient {
   createThread(workspace: string): Promise<{ id: string }> {
     return this.req(`/v1/threads`, {
       method: 'POST',
-      body: JSON.stringify({ workspace }),
+      body: JSON.stringify({ workspace, mode: 'agent', allow_shell: true }),
+    });
+  }
+
+  enableShell(threadId: string): Promise<unknown> {
+    return this.req(`/v1/threads/${threadId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ allow_shell: true }),
     });
   }
 
@@ -60,7 +67,9 @@ export class ApiClient {
     });
   }
 
-  startTurn(threadId: string, prompt: string): Promise<unknown> {
+  async startTurn(threadId: string, prompt: string): Promise<{ id?: string; turn?: { id?: string } }> {
+    // 兼容升级前创建的会话；仍由引擎的审批机制约束具体 shell 命令。
+    await this.enableShell(threadId);
     return this.req(`/v1/threads/${threadId}/turns`, {
       method: 'POST',
       body: JSON.stringify({ prompt }),

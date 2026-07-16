@@ -23,6 +23,7 @@ pub fn run() {
             sidecar::save_attachment,
             sidecar::import_attachment,
             sidecar::read_attachment_preview,
+            sidecar::list_workspace_files,
             vision_config::vision_status,
             vision_config::set_vision_key,
         ])

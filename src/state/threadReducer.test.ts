@@ -55,6 +55,26 @@ describe('threadReducer', () => {
     expect(s.items[0]).toMatchObject({ id: 'ie', kind: 'error', status: 'failed', text: 'DeepSeek API key not found.' });
   });
 
+  it('工具完成或失败时保留 started 事件里的工具名和输入', () => {
+    let s = initialThreadView;
+    s = threadReducer(s, ev({
+      seq: 1, kind: 'item.started', turn_id: 't1', item_id: 'it',
+      payload: {
+        item: { id: 'it', kind: 'command_execution', status: 'in_progress', detail: '{"command":"pwd"}' },
+        tool: { name: 'exec_shell', input: { command: 'pwd' } },
+      },
+    }));
+    s = threadReducer(s, ev({
+      seq: 2, kind: 'item.failed', turn_id: 't1', item_id: 'it',
+      payload: {
+        item: { id: 'it', kind: 'command_execution', status: 'failed', detail: 'shell disabled' },
+      },
+    }));
+
+    expect(s.items[0]).toMatchObject({ status: 'failed', text: 'shell disabled' });
+    expect(s.items[0].metadata.tool).toEqual({ name: 'exec_shell', input: { command: 'pwd' } });
+  });
+
   it('重复/乱序 seq 被丢弃', () => {
     let s = initialThreadView;
     s = threadReducer(s, ev({
